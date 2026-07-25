@@ -1,0 +1,10 @@
+.git
+.venv
+venv
+__pycache__
+*.pyc
+.env
+logs/*.jsonl
+data/chroma
+scratchpad
+*.md.bak

@@ -1,0 +1,21 @@
+# Entornos y secretos
+.env
+.venv/
+venv/
+env/
+
+# Python
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Base vectorial persistida y logs de ejecución
+data/chroma/
+logs/*.jsonl
+
+# Sistema
+.DS_Store
+Thumbs.db

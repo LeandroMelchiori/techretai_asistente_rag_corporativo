@@ -1,0 +1,32 @@
+{
+  "servicio": "TechRetail API",
+  "version": "v1",
+  "base_url": "https://api.techretail.com.ar/v1",
+  "autenticacion": "API Key en el header Authorization: Bearer <token>",
+  "endpoints": [
+    {
+      "ruta": "/productos",
+      "metodo": "GET",
+      "descripcion": "Lista los productos del catálogo del comercio."
+    },
+    {
+      "ruta": "/ordenes",
+      "metodo": "POST",
+      "descripcion": "Crea una orden de compra y dispara el cobro."
+    },
+    {
+      "ruta": "/facturas/{orden_id}",
+      "metodo": "GET",
+      "descripcion": "Devuelve la factura electrónica (con CAE) de una orden."
+    },
+    {
+      "ruta": "/conciliacion",
+      "metodo": "GET",
+      "descripcion": "Reporte de conciliación entre cobros y órdenes."
+    }
+  ],
+  "limites": {
+    "rate_limit_por_minuto": 120,
+    "tamano_max_payload_kb": 512
+  }
+}

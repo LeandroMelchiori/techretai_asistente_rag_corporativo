@@ -1,0 +1,22 @@
+# --- Núcleo del agente ---
+chromadb>=0.5.5             # Base de datos vectorial (embebida)
+tiktoken==0.7.0            # Conteo de tokens (opcional: hay fallback local)
+
+# --- Proveedores de LLM / embeddings (intercambiables por .env) ---
+google-generativeai==0.8.3  # Proveedor por defecto (Gemini)
+openai==1.51.0             # Proveedor alternativo (OpenAI)
+
+# --- Extracción de contenido por formato ---
+pypdf==4.3.1               # PDF nativo
+python-docx==1.1.2         # Word (.docx)
+openpyxl==3.1.5            # Excel (.xlsx)
+python-pptx==1.0.2         # PowerPoint (.pptx)
+beautifulsoup4==4.12.3     # HTML
+markdown-it-py==3.0.0      # Markdown
+
+# --- Interfaz ---
+streamlit==1.39.0          # Chat web simple
+
+# --- Utilidades ---
+python-dotenv==1.0.1       # Carga de variables de entorno
+reportlab==4.2.2           # Generación de los PDF ficticios de ejemplo

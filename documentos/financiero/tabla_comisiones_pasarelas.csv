@@ -1,0 +1,6 @@
+pasarela,medio_pago,comision_porcentaje,costo_fijo_ars,plazo_acreditacion_dias
+MercadoPago,Tarjeta de crédito,4.99,0,18
+MercadoPago,Tarjeta de débito,3.49,0,10
+MercadoPago,Dinero en cuenta,2.99,0,0
+Stripe,Tarjeta internacional,3.50,30,7
+Stripe,Tarjeta local,2.90,20,5
