@@ -194,6 +194,10 @@ python -m eval.evaluar
   de la red al indexar.
 - **VM + `systemd` en vez de Kubernetes:** el volumen no justifica orquestación;
   simple, Always Free y sobrevive reinicios. El `Dockerfile` queda para portabilidad.
+- **Defensa contra *prompt injection* indirecto:** los documentos se tratan como
+  **datos no confiables**, no como instrucciones. Se aíslan en bloques delimitados,
+  se sanitiza el texto para que un documento no pueda falsificar esos delimitadores
+  y el prompt del sistema tiene prioridad absoluta sobre cualquier orden incrustada.
 
 ---
 
@@ -277,7 +281,7 @@ La evolución del proyecto se resume en diez mejoras prioritarias:
 
 1. [x] **Evaluación del RAG:** conjunto de preguntas de referencia con métricas de recuperación (Hit@k, MRR) y rechazo correcto. _Pendiente: groundedness, latencia y costo._
 2. [x] **Pruebas y calidad de código:** pruebas unitarias con mocks de proveedores y CI en cada push. _Pendiente: cobertura, linting, formateo y tipos._
-3. [ ] **Seguridad frente a prompt injection:** tratar documentos como datos no confiables, reforzar el prompt y probar ataques directos e indirectos.
+3. [x] **Seguridad frente a prompt injection:** documentos tratados como datos no confiables, aislados en bloques delimitados y sanitizados, con prompt del sistema reforzado y tests de ataque indirecto. _Pendiente: validación de salida y ataques directos más sofisticados._
 4. [ ] **Autenticación y permisos:** agregar usuarios, roles, sesiones, rate limiting y autorización por área durante la recuperación.
 5. [ ] **Privacidad y logs:** anonimizar datos sensibles, permitir desactivar el registro de contenido y definir rotación y retención de logs.
 6. [ ] **Resiliencia y manejo de errores:** ocultar errores técnicos, agregar timeouts, reintentos, health checks y fallback entre proveedores.
