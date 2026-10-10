@@ -19,3 +19,6 @@ logs/*.jsonl
 # Sistema
 .DS_Store
 Thumbs.db
+
+# Skill de terceros (UI/UX Pro Max) — instalada localmente, no se versiona
+.claude/skills/ui-ux-pro-max/
