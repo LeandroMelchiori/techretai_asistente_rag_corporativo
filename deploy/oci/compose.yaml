@@ -1,0 +1,83 @@
+# TechRetAI sobre la plataforma Docker + Traefik de OCI (application-platform).
+#
+# En la VM:
+#   /opt/apps/apps/techretai/compose.yaml                 <- este archivo
+#   /etc/docker-platform/apps/techretai/runtime.env       <- secretos (root, 0600)
+#
+# Ver docs/deploy_oci.md para construir la imagen, indexar y levantar el servicio.
+
+name: techretai
+
+x-hardening: &hardening
+  image: ${TECHRETAI_IMAGE:?Defina TECHRETAI_IMAGE}
+  user: "10001:10001"
+  read_only: true
+  cap_drop:
+    - ALL
+  security_opt:
+    - no-new-privileges:true
+  pids_limit: 256
+  environment:
+    LLM_PROVIDER: gemini
+    GOOGLE_API_KEY: ${GOOGLE_API_KEY:?GOOGLE_API_KEY is required}
+    GEMINI_CHAT_MODEL: ${GEMINI_CHAT_MODEL:?GEMINI_CHAT_MODEL is required}
+    GEMINI_EMBED_MODEL: ${GEMINI_EMBED_MODEL:?GEMINI_EMBED_MODEL is required}
+  tmpfs:
+    - /tmp:rw,noexec,nosuid,nodev,size=64m
+  # Excepción writable_volume: Chroma (SQLite) y el log de auditoría escriben en /data.
+  volumes:
+    - techretai-data:/data
+
+services:
+  app:
+    <<: *hardening
+    restart: unless-stopped
+    cpus: 0.50
+    mem_limit: 768m
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8501/_stcore/health', timeout=4)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    expose:
+      - "8501"
+    networks:
+      - proxy
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: proxy
+      traefik.http.services.techretai.loadbalancer.server.port: "8501"
+      # HTTPS con certificado de Let's Encrypt.
+      traefik.http.routers.techretai.entrypoints: websecure
+      traefik.http.routers.techretai.rule: Host(`techretai.sachadev.me`) || Host(`www.techretai.sachadev.me`)
+      traefik.http.routers.techretai.tls.certresolver: letsencrypt
+      # HTTP -> HTTPS solo para estos hosts (el resto del entrypoint web sigue en HTTP).
+      traefik.http.routers.techretai-http.entrypoints: web
+      traefik.http.routers.techretai-http.rule: Host(`techretai.sachadev.me`) || Host(`www.techretai.sachadev.me`)
+      traefik.http.routers.techretai-http.middlewares: techretai-https
+      traefik.http.middlewares.techretai-https.redirectscheme.scheme: https
+      traefik.http.middlewares.techretai-https.redirectscheme.permanent: "true"
+
+  # Indexación de los documentos en el volumen. Se ejecuta a demanda:
+  #   docker compose --profile ops run --rm ingest
+  ingest:
+    <<: *hardening
+    profiles:
+      - ops
+    restart: "no"
+    cpus: 0.50
+    mem_limit: 768m
+    command: ["python", "-m", "scripts.ingest", "--reset"]
+    networks:
+      - egress
+
+volumes:
+  techretai-data:
+
+networks:
+  proxy:
+    external: true
+    name: proxy
+  # Salida a internet para la API de Gemini, sin pasar por la red de Traefik.
+  egress: {}

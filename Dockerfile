@@ -1,13 +1,20 @@
 # Imagen del Agente RAG Corporativo de TechRetail.
-# Se construye con la base vectorial ya indexada dentro de la imagen para que
-# el contenedor arranque listo para responder.
+# Pensada para la plataforma Docker + Traefik de OCI: usuario sin privilegios,
+# root filesystem de solo lectura y datos persistentes en el volumen /data.
 FROM python:3.11-slim
 
 # Evita prompts y bytecode; salida sin buffer para ver logs en tiempo real.
+# HOME apunta a /tmp (tmpfs) porque el resto del filesystem es de solo lectura.
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
+    HOME=/tmp \
     STREAMLIT_SERVER_PORT=8501 \
-    STREAMLIT_SERVER_ADDRESS=0.0.0.0
+    STREAMLIT_SERVER_ADDRESS=0.0.0.0 \
+    STREAMLIT_SERVER_HEADLESS=true \
+    STREAMLIT_BROWSER_GATHER_USAGE_STATS=false \
+    ANONYMIZED_TELEMETRY=False \
+    CHROMA_DIR=/data/chroma \
+    LOG_FILE=/data/logs/consultas.jsonl
 
 WORKDIR /app
 
@@ -18,15 +25,18 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Código y documentos.
 COPY . .
 
-# Indexa los documentos en tiempo de build. Requiere la credencial del
-# proveedor como build-arg (o se puede indexar al arrancar, ver docs/deploy_oci.md).
-# ARG GOOGLE_API_KEY
-# ENV GOOGLE_API_KEY=$GOOGLE_API_KEY
-# RUN python -m scripts.ingest --reset
+# Usuario con UID fijo y /data con su dueño: el volumen nombrado hereda estos
+# permisos la primera vez que se monta.
+RUN useradd --uid 10001 --no-create-home --shell /usr/sbin/nologin techretai \
+    && mkdir -p /data/chroma /data/logs \
+    && chown -R 10001:10001 /data
+USER 10001:10001
+
+# El índice no se genera en el build (necesitaría la API key dentro de la
+# imagen): se crea una vez en el volumen con el servicio "ingest" del Compose.
 
 EXPOSE 8501
 
-# Chequeo de salud para orquestadores (Container Instances / OKE).
-HEALTHCHECK CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8501/_stcore/health')" || exit 1
+HEALTHCHECK CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8501/_stcore/health', timeout=4)" || exit 1
 
 CMD ["streamlit", "run", "app/streamlit_app.py"]
