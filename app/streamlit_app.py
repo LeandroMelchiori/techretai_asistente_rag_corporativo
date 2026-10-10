@@ -44,7 +44,9 @@ st.markdown(
     <style>
     .marca {{ font-size: 2.5rem; font-weight: 800; line-height: 1.1; margin-bottom: .2rem; }}
     .marca .ai {{ color: {ACCENT}; }}
-    .subt {{ color: #9AA0A6; font-size: 1.02rem; margin-bottom: .3rem; }}
+    .subt {{ color: #B4BAC2; font-size: 1.02rem; margin-bottom: .3rem; }}
+    /* Objetivo táctil mínimo 44px (accesibilidad / interacción) */
+    div[data-testid="stButton"] > button {{ min-height: 44px; }}
     /* Botones "secundarios" con aspecto de chip/lista */
     div[data-testid="stButton"] > button:not([kind="primary"]):not([data-testid="stBaseButton-primary"]) {{
         text-align: left; border: 1px solid #2A2F3A; background: #161A23;
@@ -53,11 +55,16 @@ st.markdown(
         transition: border-color .15s ease;
     }}
     div[data-testid="stButton"] > button:not([kind="primary"]):hover {{ border-color: {ACCENT}; color: {ACCENT}; }}
-    /* Botón "primario" = conversación activa */
+    /* Botón "primario" = conversación activa (texto oscuro sobre el acento, mejor contraste) */
     div[data-testid="stButton"] > button[kind="primary"],
     div[data-testid="stButton"] > button[data-testid="stBaseButton-primary"] {{
         text-align: left; border-radius: 10px; padding: .5rem .7rem; font-weight: 700;
+        color: #052A26;
         white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }}
+    /* Respeta la preferencia de movimiento reducido */
+    @media (prefers-reduced-motion: reduce) {{
+        * {{ transition: none !important; animation: none !important; }}
     }}
     </style>
     """,
@@ -108,29 +115,39 @@ def eliminar(cid: int) -> None:
 #  Procesamiento de una pregunta (sobre la conversación activa)
 # --------------------------------------------------------------------------
 def procesar(pregunta: str) -> None:
+    """Registra la pregunta del usuario y deja la respuesta pendiente.
+
+    La respuesta se genera en el siguiente render mostrando un indicador de
+    carga, para no congelar la interfaz durante la llamada al LLM.
+    """
     conv = conv_actual()
     conv["mensajes"].append({"rol": "user", "texto": pregunta})
     if conv["titulo"] == "Nueva conversación":
         conv["titulo"] = pregunta[:38] + ("…" if len(pregunta) > 38 else "")
-    try:
-        settings.validate()
-        resp = responder(pregunta)
-        registrar(resp)
-    except Exception as e:  # noqa: BLE001
-        conv["mensajes"].append(
-            {"rol": "assistant", "texto": f"⚠️ Ocurrió un error: {e}", "fuentes": []}
-        )
-        st.rerun()
-        return
-    conv["mensajes"].append(
-        {
-            "rol": "assistant",
-            "texto": resp.texto,
-            "fuentes": resp.fuentes,
-            "respuesta_obj": resp,
-            "feedback_dado": False,
-        }
-    )
+    st.rerun()
+
+
+def responder_pendiente(conv: dict) -> None:
+    """Si la última intervención es del usuario, genera la respuesta con feedback de carga."""
+    with st.chat_message("assistant", avatar="🤖"):
+        with st.spinner("Buscando en los documentos…"):
+            try:
+                settings.validate()
+                resp = responder(conv["mensajes"][-1]["texto"])
+                registrar(resp)
+                conv["mensajes"].append(
+                    {
+                        "rol": "assistant",
+                        "texto": resp.texto,
+                        "fuentes": resp.fuentes,
+                        "respuesta_obj": resp,
+                        "feedback_dado": False,
+                    }
+                )
+            except Exception as e:  # noqa: BLE001
+                conv["mensajes"].append(
+                    {"rol": "assistant", "texto": f"⚠️ Ocurrió un error: {e}", "fuentes": []}
+                )
     st.rerun()
 
 
@@ -154,7 +171,7 @@ with st.sidebar:
     ]
 
     if not listadas:
-        st.caption("_No hay conversaciones todavía._")
+        st.caption("_Sin conversaciones aún. Escribí abajo para empezar._")
 
     for cid in listadas:
         conv = st.session_state.conversaciones[cid]
@@ -179,7 +196,7 @@ with st.sidebar:
             sel, ren, dele = st.columns([0.7, 0.15, 0.15])
             if sel.button(
                 conv["titulo"], key=f"conv_{cid}", use_container_width=True,
-                type="primary" if activa else "secondary",
+                type="primary" if activa else "secondary", help=conv["titulo"],
             ):
                 st.session_state.conv_actual = cid
                 st.rerun()
@@ -248,6 +265,11 @@ for i, msg in enumerate(conv["mensajes"]):
                 conv["mensajes"][i]["feedback_dado"] = True
                 st.toast("Feedback registrado, lo tendremos en cuenta.")
                 st.rerun()
+
+
+# Si la última intervención es del usuario, la respuesta está pendiente de generarse.
+if conv["mensajes"] and conv["mensajes"][-1]["rol"] == "user":
+    responder_pendiente(conv)
 
 
 pregunta = st.chat_input("Escribí tu pregunta...")
