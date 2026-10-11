@@ -24,48 +24,103 @@ from src.agent import responder  # noqa: E402
 from src.config import settings  # noqa: E402
 from src.logging_utils import registrar  # noqa: E402
 
-ACCENT = "#12B5A5"
+TITULO_NUEVA = "Nueva conversación"
+AVATAR = {"assistant": ":material/smart_toy:", "user": ":material/person:"}
 
-st.set_page_config(page_title="TechRetAI", page_icon="🤖", layout="centered")
+st.set_page_config(page_title="TechRetAI", page_icon=":material/smart_toy:", layout="centered")
 
 EJEMPLOS = [
-    "¿Cuántos días de vacaciones me corresponden con 6 años de antigüedad?",
-    "¿Qué comisión cobra MercadoPago por tarjeta de crédito?",
-    "¿Cuánto cuesta el plan Growth y qué incluye?",
-    "¿Cómo funciona la facturación automática contra ARCA?",
+    (":material/beach_access:", "¿Cuántos días de vacaciones me corresponden con 6 años de antigüedad?"),
+    (":material/credit_card:", "¿Qué comisión cobra MercadoPago por tarjeta de crédito?"),
+    (":material/sell:", "¿Cuánto cuesta el plan Growth y qué incluye?"),
+    (":material/receipt_long:", "¿Cómo funciona la facturación automática contra ARCA?"),
 ]
 
 
 # --------------------------------------------------------------------------
 #  Estilos
 # --------------------------------------------------------------------------
+# Los widgets con key reciben la clase .st-key-<key>, lo que permite dar estilo
+# a cada grupo de botones sin afectar al resto de la interfaz.
 st.markdown(
-    f"""
+    """
     <style>
-    .marca {{ font-size: 2.5rem; font-weight: 800; line-height: 1.1; margin-bottom: .2rem; }}
-    .marca .ai {{ color: {ACCENT}; }}
-    .subt {{ color: #B4BAC2; font-size: 1.02rem; margin-bottom: .3rem; }}
-    /* Objetivo táctil mínimo 44px (accesibilidad / interacción) */
-    div[data-testid="stButton"] > button {{ min-height: 44px; }}
-    /* Botones "secundarios" con aspecto de chip/lista */
-    div[data-testid="stButton"] > button:not([kind="primary"]):not([data-testid="stBaseButton-primary"]) {{
-        text-align: left; border: 1px solid #2A2F3A; background: #161A23;
-        border-radius: 10px; padding: .5rem .7rem; font-weight: 500;
-        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-        transition: border-color .15s ease;
-    }}
-    div[data-testid="stButton"] > button:not([kind="primary"]):hover {{ border-color: {ACCENT}; color: {ACCENT}; }}
-    /* Botón "primario" = conversación activa (texto oscuro sobre el acento, mejor contraste) */
-    div[data-testid="stButton"] > button[kind="primary"],
-    div[data-testid="stButton"] > button[data-testid="stBaseButton-primary"] {{
-        text-align: left; border-radius: 10px; padding: .5rem .7rem; font-weight: 700;
-        color: #052A26;
-        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-    }}
+    @import url('https://fonts.googleapis.com/css2?family=Lexend:wght@600;700;800&display=swap');
+
+    :root {
+        --accent: #12B5A5;
+        --on-accent: #052A26;
+        --surface: #161A23;
+        --surface-hover: #1B2130;
+        --border: #2A2F3A;
+        --muted: #B4BAC2;
+        --danger: #F87171;
+        --radius: 12px;
+    }
+
+    /* Marca y títulos */
+    .marca, .marca-lateral, .seccion { font-family: 'Lexend', 'Source Sans Pro', sans-serif; }
+    .marca { font-size: 2.4rem; font-weight: 800; line-height: 1.1; margin-bottom: .25rem; letter-spacing: -.01em; }
+    .marca-lateral { font-size: 1.35rem; font-weight: 700; margin-bottom: .1rem; }
+    .marca .ai, .marca-lateral .ai { color: var(--accent); }
+    .subt { color: var(--muted); font-size: 1.02rem; line-height: 1.5; }
+    .seccion { font-size: 1rem; font-weight: 600; margin: 1.1rem 0 .5rem; }
+
+    /* Franja decorativa superior de Streamlit: fuera, para un encabezado más limpio */
+    [data-testid="stDecoration"] { display: none; }
+
+    /* Base de todos los botones: objetivo táctil de 44px y foco visible.
+       Selector descendiente: con "help", Streamlit envuelve el botón en un tooltip. */
+    div[data-testid="stButton"] button { min-height: 44px; border-radius: var(--radius); }
+    div[data-testid="stButton"] button:focus-visible,
+    div[class*="st-key-fb_"] button:focus-visible {
+        outline: 2px solid var(--accent); outline-offset: 2px; box-shadow: none;
+    }
+
+    /* Feedback (pulgares): el widget nativo usa botones de 24px */
+    div[class*="st-key-fb_"] button { min-width: 44px; min-height: 44px; justify-content: center; }
+
+    /* Preguntas sugeridas: tarjetas con el texto completo (salto de línea).
+       La altura mínima admite tres líneas para que las tarjetas de una fila coincidan. */
+    div[class*="st-key-ej_"] button {
+        justify-content: flex-start; align-items: flex-start; text-align: left; gap: .6rem;
+        min-height: 5.9rem; padding: .8rem .9rem;
+        background: var(--surface); border: 1px solid var(--border);
+        transition: border-color .2s ease, background-color .2s ease;
+    }
+    div[class*="st-key-ej_"] button p {
+        white-space: normal; overflow-wrap: anywhere; line-height: 1.4; font-weight: 500;
+    }
+    div[class*="st-key-ej_"] button span { color: var(--accent); flex-shrink: 0; }
+    div[class*="st-key-ej_"] button:hover { border-color: var(--accent); background: var(--surface-hover); }
+
+    /* Conversaciones de la barra lateral: una línea con elipsis */
+    div[class*="st-key-conv_"] button { justify-content: flex-start; text-align: left; padding: .5rem .75rem; }
+    div[class*="st-key-conv_"] button > div { min-width: 0; max-width: 100%; }
+    div[class*="st-key-conv_"] button p {
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500;
+    }
+    div[class*="st-key-conv_"] button[kind="primary"] p { color: var(--on-accent); font-weight: 700; }
+
+    /* Botones sólo con ícono: el texto queda disponible para lectores de pantalla */
+    div[class*="st-key-ed_"] button, div[class*="st-key-del_"] button { position: relative; padding: 0 .6rem; }
+    div[class*="st-key-ed_"] button p, div[class*="st-key-del_"] button p {
+        position: absolute; width: 1px; height: 1px; overflow: hidden;
+        clip: rect(0 0 0 0); white-space: nowrap;
+    }
+    div[class*="st-key-del_"] button:hover { border-color: var(--danger); color: var(--danger); }
+
+    /* Pantallas angostas: las tarjetas van en una columna y no necesitan igualar alturas */
+    @media (max-width: 640px) {
+        div[class*="st-key-ej_"] button { min-height: 0; }
+        [data-testid="stMainBlockContainer"] { padding-top: 3.5rem; }
+        .marca { font-size: 2rem; }
+    }
+
     /* Respeta la preferencia de movimiento reducido */
-    @media (prefers-reduced-motion: reduce) {{
-        * {{ transition: none !important; animation: none !important; }}
-    }}
+    @media (prefers-reduced-motion: reduce) {
+        * { transition: none !important; animation: none !important; }
+    }
     </style>
     """,
     unsafe_allow_html=True,
@@ -78,7 +133,7 @@ st.markdown(
 def _crear_conversacion() -> int:
     cid = st.session_state.contador
     st.session_state.contador += 1
-    st.session_state.conversaciones[cid] = {"titulo": "Nueva conversación", "mensajes": []}
+    st.session_state.conversaciones[cid] = {"titulo": TITULO_NUEVA, "mensajes": []}
     st.session_state.conv_actual = cid
     return cid
 
@@ -122,14 +177,15 @@ def procesar(pregunta: str) -> None:
     """
     conv = conv_actual()
     conv["mensajes"].append({"rol": "user", "texto": pregunta})
-    if conv["titulo"] == "Nueva conversación":
-        conv["titulo"] = pregunta[:38] + ("…" if len(pregunta) > 38 else "")
+    if conv["titulo"] == TITULO_NUEVA:
+        # El título completo se recorta visualmente en la barra lateral (CSS).
+        conv["titulo"] = pregunta[:120]
     st.rerun()
 
 
 def responder_pendiente(conv: dict) -> None:
     """Si la última intervención es del usuario, genera la respuesta con feedback de carga."""
-    with st.chat_message("assistant", avatar="🤖"):
+    with st.chat_message("assistant", avatar=AVATAR["assistant"]):
         with st.spinner("Buscando en los documentos…"):
             try:
                 settings.validate()
@@ -146,19 +202,31 @@ def responder_pendiente(conv: dict) -> None:
                 )
             except Exception as e:  # noqa: BLE001
                 conv["mensajes"].append(
-                    {"rol": "assistant", "texto": f"⚠️ Ocurrió un error: {e}", "fuentes": []}
+                    {
+                        "rol": "assistant",
+                        "texto": "No pude generar la respuesta. Probá de nuevo en unos segundos.",
+                        "detalle": str(e)[:300],
+                        "error": True,
+                        "fuentes": [],
+                    }
                 )
     st.rerun()
+
+
+def modelo_activo() -> str:
+    if settings.provider == "openai":
+        return settings.openai_chat_model
+    return settings.gemini_chat_model
 
 
 # --------------------------------------------------------------------------
 #  Barra lateral: marca + lista de conversaciones + estado
 # --------------------------------------------------------------------------
 with st.sidebar:
-    st.markdown(f"### 🤖 TechRet<span style='color:{ACCENT}'>AI</span>", unsafe_allow_html=True)
+    st.markdown("<div class='marca-lateral'>TechRet<span class='ai'>AI</span></div>", unsafe_allow_html=True)
     st.caption("Asistente corporativo de TechRetail Solutions")
 
-    if st.button("➕  Nueva conversación", use_container_width=True):
+    if st.button("Nueva conversación", icon=":material/add:", use_container_width=True):
         ir_a_nueva()
         st.rerun()
 
@@ -171,7 +239,7 @@ with st.sidebar:
     ]
 
     if not listadas:
-        st.caption("_Sin conversaciones aún. Escribí abajo para empezar._")
+        st.caption("Todavía no hay conversaciones. Elegí una pregunta sugerida o escribí la tuya.")
 
     for cid in listadas:
         conv = st.session_state.conversaciones[cid]
@@ -184,7 +252,7 @@ with st.sidebar:
                 label_visibility="collapsed",
             )
             c1, c2 = st.columns(2)
-            if c1.button("Guardar", key=f"save_{cid}", use_container_width=True):
+            if c1.button("Guardar", key=f"save_{cid}", type="primary", use_container_width=True):
                 conv["titulo"] = nuevo.strip() or conv["titulo"]
                 st.session_state.renombrando = None
                 st.rerun()
@@ -193,32 +261,32 @@ with st.sidebar:
                 st.rerun()
         else:
             # Fila normal: seleccionar | renombrar | eliminar.
-            sel, ren, dele = st.columns([0.7, 0.15, 0.15])
+            sel, ren, dele = st.columns([0.68, 0.16, 0.16], gap="small", vertical_alignment="center")
             if sel.button(
                 conv["titulo"], key=f"conv_{cid}", use_container_width=True,
                 type="primary" if activa else "secondary", help=conv["titulo"],
             ):
                 st.session_state.conv_actual = cid
                 st.rerun()
-            if ren.button("✏️", key=f"ed_{cid}", help="Renombrar"):
+            if ren.button("Renombrar", key=f"ed_{cid}", icon=":material/edit:", help="Renombrar"):
                 st.session_state.renombrando = cid
                 st.rerun()
-            if dele.button("🗑️", key=f"del_{cid}", help="Eliminar"):
+            if dele.button("Eliminar", key=f"del_{cid}", icon=":material/delete:", help="Eliminar"):
                 eliminar(cid)
                 st.rerun()
 
     st.divider()
     st.markdown("**Estado**")
-    st.caption(f"Modelo: `{settings.provider}`")
+    st.caption(f"Modelo: `{modelo_activo()}`")
     try:
-        st.caption(f"Documentos indexados: **{vectorstore.stats()['fragmentos']}** fragmentos")
+        st.caption(f"Base de conocimiento: **{vectorstore.stats()['fragmentos']}** fragmentos indexados")
     except Exception:
-        st.caption("Base de conocimiento: (no inicializada)")
+        st.caption("Base de conocimiento: no inicializada")
 
     st.divider()
     st.caption(
-        "⚠️ Estás conversando con un **agente de IA**. Las respuestas se basan en "
-        "documentos internos y pueden contener errores: verificá en la fuente citada."
+        ":material/info: Estás conversando con un **agente de IA**. Las respuestas se "
+        "basan en documentos internos y pueden contener errores: verificá en la fuente citada."
     )
 
 
@@ -230,41 +298,53 @@ st.markdown(
     "<div class='subt'>Preguntá lo que necesites sobre la documentación interna de la empresa.</div>",
     unsafe_allow_html=True,
 )
-st.write("")
 
 conv = conv_actual()
 
-if not conv["mensajes"]:
-    st.markdown("##### 💡 Probá con una de estas preguntas")
-    cols = st.columns(2)
-    for i, ejemplo in enumerate(EJEMPLOS):
-        if cols[i % 2].button(ejemplo, key=f"ej_{i}", use_container_width=True):
-            procesar(ejemplo)
+if conv["mensajes"]:
+    # Si la conversación fue renombrada, su título completo (que en la barra lateral
+    # puede verse recortado) no aparece en el chat: se muestra acá.
+    if conv["titulo"] != conv["mensajes"][0]["texto"][:120]:
+        st.caption(f":material/forum: {conv['titulo']}")
+else:
+    st.markdown("<div class='seccion'>Probá con una de estas preguntas</div>", unsafe_allow_html=True)
+    # Fila por fila, para que las tarjetas de cada fila queden alineadas.
+    for fila in range(0, len(EJEMPLOS), 2):
+        cols = st.columns(2)
+        for col, (i, (icono, ejemplo)) in zip(cols, enumerate(EJEMPLOS[fila:fila + 2], start=fila)):
+            if col.button(ejemplo, key=f"ej_{i}", icon=icono, use_container_width=True):
+                procesar(ejemplo)
 
 for i, msg in enumerate(conv["mensajes"]):
-    avatar = "🤖" if msg["rol"] == "assistant" else "🧑"
-    with st.chat_message(msg["rol"], avatar=avatar):
-        st.markdown(msg["texto"])
+    with st.chat_message(msg["rol"], avatar=AVATAR[msg["rol"]]):
+        if msg.get("error"):
+            st.error(msg["texto"], icon=":material/error:")
+            if msg.get("detalle"):
+                st.caption(f"Detalle técnico: {msg['detalle']}")
+        else:
+            st.markdown(msg["texto"])
         if msg.get("fuentes"):
-            with st.expander("📄 Fuentes citadas"):
+            with st.expander("Fuentes citadas", icon=":material/description:"):
                 for f in msg["fuentes"]:
                     st.markdown(
-                        f"- **{f['archivo']}** · _{f['categoria']}_ "
-                        f"({f['formato']}) — relevancia {f['relevancia']:.2f}"
+                        f"- **{f['archivo']}** · {f['categoria']} · {f['formato'].upper()} "
+                        f"· relevancia {f['relevancia']:.0%}"
                     )
-        if msg["rol"] == "assistant" and msg.get("respuesta_obj") and not msg.get("feedback_dado"):
-            c1, c2, _ = st.columns([1, 1, 8])
-            cid = st.session_state.conv_actual
-            if c1.button("👍", key=f"up_{cid}_{i}"):
-                registrar(msg["respuesta_obj"], feedback="positivo")
-                conv["mensajes"][i]["feedback_dado"] = True
-                st.toast("¡Gracias por tu feedback!")
-                st.rerun()
-            if c2.button("👎", key=f"down_{cid}_{i}"):
-                registrar(msg["respuesta_obj"], feedback="negativo")
-                conv["mensajes"][i]["feedback_dado"] = True
-                st.toast("Feedback registrado, lo tendremos en cuenta.")
-                st.rerun()
+        if msg["rol"] == "assistant" and msg.get("respuesta_obj"):
+            if msg.get("feedback_dado"):
+                # Confirmación explícita: un widget deshabilitado no deja ver qué se eligió.
+                if msg.get("feedback") == "positivo":
+                    st.caption(":material/thumb_up: Marcaste esta respuesta como útil. ¡Gracias!")
+                else:
+                    st.caption(":material/thumb_down: Marcaste esta respuesta como poco útil. Lo tendremos en cuenta.")
+            else:
+                cid = st.session_state.conv_actual
+                valor = st.feedback("thumbs", key=f"fb_{cid}_{i}")
+                if valor is not None:
+                    msg["feedback"] = "positivo" if valor == 1 else "negativo"
+                    registrar(msg["respuesta_obj"], feedback=msg["feedback"])
+                    msg["feedback_dado"] = True
+                    st.rerun()
 
 
 # Si la última intervención es del usuario, la respuesta está pendiente de generarse.
@@ -272,6 +352,6 @@ if conv["mensajes"] and conv["mensajes"][-1]["rol"] == "user":
     responder_pendiente(conv)
 
 
-pregunta = st.chat_input("Escribí tu pregunta...")
+pregunta = st.chat_input("Escribí tu pregunta…")
 if pregunta:
     procesar(pregunta)
