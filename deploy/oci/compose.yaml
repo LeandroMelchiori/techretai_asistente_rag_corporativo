@@ -2,7 +2,8 @@
 #
 # En la VM:
 #   /opt/apps/apps/techretai/compose.yaml                 <- este archivo
-#   /etc/docker-platform/apps/techretai/runtime.env       <- secretos (root, 0600)
+#   /opt/apps/apps/techretai/.env                         <- imagen y modelos
+#   /etc/docker-platform/apps/techretai/runtime.env       <- GOOGLE_API_KEY (root, 0600)
 #
 # Ver docs/deploy_oci.md para construir la imagen, indexar y levantar el servicio.
 

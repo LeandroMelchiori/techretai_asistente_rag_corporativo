@@ -1,106 +1,127 @@
 # Despliegue en Oracle Cloud Infrastructure (OCI)
 
-Esta guía cubre la publicación del agente en **Oracle Cloud Infrastructure
-(OCI)**. Se propone la ruta más simple y económica: **OCI Container Registry
-(OCIR) + Container Instances**, con **Object Storage** para los documentos
-originales y **OCI Vault** para las credenciales.
+TechRetAI corre como un contenedor más dentro de la **plataforma Docker +
+Traefik** de OCI: una VM Ampere A1 (Always Free) administrada con Terraform en el
+repositorio [`infrastructure-as-code`](https://github.com/LeandroMelchiori/infrastructure-as-code)
+(`oci/docker-platform`), que aloja varias aplicaciones detrás de un único proxy.
 
-> No necesitás Kubernetes. Container Instances corre el contenedor sin que
-> gestiones ninguna VM.
+La infraestructura (red, NSG, VM, IP pública reservada, Traefik) no vive en este
+repositorio. Acá sólo están la imagen (`Dockerfile`) y el Compose de la
+aplicación (`deploy/oci/compose.yaml`).
 
 ## Arquitectura
 
-```
-   Documentos (PDF/Word/Excel/…)
-            │
-            ▼
-   [ OCI Object Storage ]  ── almacenamiento de los archivos originales
-            │
-            ▼
-   [ Contenedor del agente ]  (imagen en OCIR, corriendo en Container Instances)
-      ├─ Ingesta + ChromaDB (base vectorial embebida)
-      ├─ RAG + LLM (Gemini / OpenAI)
-      └─ Interfaz Streamlit  ──►  puerto 8501 (público vía Load Balancer o IP)
-            │
-            ▼
-   [ OCI Vault ]  ── guarda GOOGLE_API_KEY / OPENAI_API_KEY
+```text
+Internet ──► techretai.sachadev.me (DNS A → IP pública reservada de la plataforma)
+               │
+               ▼
+        [ Traefik ]  :80 → redirige a HTTPS sólo para este host
+               │     :443 → certificado de Let's Encrypt (HTTP-01)
+               ▼  red Docker "proxy"
+        [ techretai-app ]  Streamlit :8501, UID 10001, root filesystem read-only
+               │
+               ├─ volumen techretai-data:/data  (ChromaDB + logs/consultas.jsonl)
+               └─ API de Gemini (LLM + embeddings)
 ```
 
-Servicios de OCI utilizados:
+Controles del contenedor, alineados con el baseline de la plataforma:
+`no-new-privileges`, `cap_drop: ALL`, usuario no root, `read_only`, `/tmp` como
+tmpfs `noexec`, límites de CPU/memoria, healthcheck y ningún puerto publicado en
+el host. La única excepción es el volumen `/data` con escritura, porque ChromaDB
+(SQLite) y el registro de auditoría necesitan persistir.
 
-| Servicio | Uso |
+## Archivos en la VM
+
+| Ruta | Contenido |
 |---|---|
-| **Container Registry (OCIR)** | Alojar la imagen Docker del agente |
-| **Container Instances** | Ejecutar el contenedor sin administrar VMs |
-| **Object Storage** | Guardar los documentos originales |
-| **Vault** | Guardar las API keys de forma segura |
+| `/opt/apps/apps/techretai/compose.yaml` | Copia de `deploy/oci/compose.yaml` |
+| `/opt/apps/apps/techretai/.env` | `TECHRETAI_IMAGE`, `GEMINI_CHAT_MODEL`, `GEMINI_EMBED_MODEL` (no son secretos) |
+| `/etc/docker-platform/apps/techretai/runtime.env` | `GOOGLE_API_KEY` (root, `0600`) |
 
-## Paso 1 — Preparar la imagen
-
-```bash
-# Autenticarse contra el Container Registry de tu región (ej. sa-saopaulo-1)
-docker login <region-key>.ocir.io -u '<tenancy-namespace>/<usuario>'
-
-# Construir y etiquetar la imagen
-docker build -t <region-key>.ocir.io/<tenancy-namespace>/techretail-agente:1.0 .
-
-# Publicarla en OCIR
-docker push <region-key>.ocir.io/<tenancy-namespace>/techretail-agente:1.0
-```
-
-## Paso 2 — Guardar la API key en OCI Vault
-
-1. En la consola de OCI: **Identity & Security → Vault → Create Vault**.
-2. Crear una **Master Encryption Key**.
-3. Crear un **Secret** llamado `GOOGLE_API_KEY` (o `OPENAI_API_KEY`) con tu clave.
-4. Anotar el OCID del secreto para inyectarlo como variable de entorno.
-
-## Paso 3 — (Opcional) Subir los documentos a Object Storage
+Los comandos siguientes se ejecutan desde el equipo del operador, que es la única
+IP habilitada para SSH en el NSG de la plataforma.
 
 ```bash
-oci os bucket create --name techretail-docs
-oci os object bulk-upload --bucket-name techretail-docs --src-dir documentos/
+VM=opc@<ip-publica-de-la-plataforma>   # terraform output -raw server_public_ip
+KEY=~/.ssh/application-platform-dev-access
 ```
 
-Los documentos ya viajan dentro de la imagen, así que este paso es para tener
-la fuente original versionada y para el pipeline de actualización.
+## 1. Registrar la aplicación (una sola vez)
 
-## Paso 4 — Crear la Container Instance
+```bash
+ssh -i $KEY $VM 'sudo install -d -o root -g root -m 0750 /etc/docker-platform/apps/techretai \
+  && install -d -m 0750 /opt/apps/apps/techretai'
+scp -i $KEY deploy/oci/compose.yaml $VM:/opt/apps/apps/techretai/compose.yaml
+```
 
-Consola de OCI: **Developer Services → Container Instances → Create**.
+Cargar la API key desde una sesión SSH en la VM, sin que pase por archivos
+locales ni por el historial de la shell:
 
-- **Imagen:** la de OCIR del paso 1.
-- **Puerto:** `8501` (Streamlit).
-- **Variables de entorno:**
-  - `LLM_PROVIDER=gemini`
-  - `GOOGLE_API_KEY` → referenciando el secreto del Vault.
-- **Shape:** 1 OCPU / 4 GB alcanza para el prototipo.
+```bash
+read -rsp 'GOOGLE_API_KEY: ' k; echo
+printf 'GOOGLE_API_KEY=%s\n' "$k" | sudo install -o root -g root -m 0600 /dev/stdin \
+  /etc/docker-platform/apps/techretai/runtime.env; unset k
+```
 
-Al crear la instancia se indexan los documentos. Si preferís no indexar en el
-build, agregá un arranque que ejecute `python -m scripts.ingest --reset` antes
-de levantar Streamlit (por ejemplo, con un pequeño `entrypoint.sh`).
+Usá una API key exclusiva para TechRetAI: la plataforma comparte la VM con otras
+aplicaciones y root/Docker pueden inspeccionar las variables de los contenedores.
 
-## Paso 5 — Exponer y probar
+## 2. Construir la imagen
 
-- Asignar una **IP pública** a la Container Instance o ponerla detrás de un
-  **Load Balancer** de OCI.
-- Abrir el puerto 8501 en la **Network Security Group** de la VCN.
-- Acceder a `http://<ip-publica>:8501` y probar el agente.
-- **Sacar una captura o grabar un video** del agente respondiendo en la nube y
-  agregarlo al README.
+La VM es ARM64, así que la imagen se construye ahí mismo a partir de un commit:
 
-## Alternativas dentro de OCI
+```bash
+SHA=$(git rev-parse --short=7 HEAD)
+git archive --format=tar HEAD | ssh -i $KEY $VM "docker build -t techretai:$SHA -"
+ssh -i $KEY $VM "sed -i 's/^TECHRETAI_IMAGE=.*/TECHRETAI_IMAGE=techretai:$SHA/' /opt/apps/apps/techretai/.env"
+```
 
-- **Compute (VM):** levantar una instancia, instalar Docker y correr el
-  contenedor. Más control, requiere administrar la VM.
-- **OKE (Kubernetes):** para escalado automático según el volumen de preguntas.
-- **Base vectorial nativa de Oracle:** reemplazar ChromaDB por **Oracle
-  Database 23ai / Autonomous Database**, que soporta búsqueda vectorial nativa.
-  Suma puntos por profundizar en el ecosistema OCI (ver `src/vectorstore.py`
-  para el punto de reemplazo).
+El `.env` de la aplicación también fija los modelos de Gemini
+(`GEMINI_CHAT_MODEL`, `GEMINI_EMBED_MODEL`).
+
+## 3. Indexar los documentos
+
+Crea la colección de ChromaDB dentro del volumen `techretai-data`. Se repite sólo
+cuando cambian los documentos o el modelo de embeddings:
+
+```bash
+ssh -i $KEY $VM 'cd /opt/apps/apps/techretai && sudo docker compose \
+  --env-file .env --env-file /etc/docker-platform/apps/techretai/runtime.env \
+  --profile ops run --rm ingest'
+```
+
+## 4. Levantar o actualizar el servicio
+
+```bash
+ssh -i $KEY $VM 'cd /opt/apps/apps/techretai && sudo docker compose \
+  --env-file .env --env-file /etc/docker-platform/apps/techretai/runtime.env \
+  up -d app && docker ps --filter name=techretai'
+```
+
+Para actualizar: repetir el paso 2 con el nuevo commit y luego el paso 4. Para
+volver atrás, escribir en `.env` el tag anterior y repetir el paso 4.
+
+## 5. DNS y HTTPS
+
+En Cloudflare, los registros `A` de `techretai` y `www.techretai` apuntan a la IP
+pública **reservada** de la plataforma, en modo *DNS only*. Traefik obtiene el
+certificado de Let's Encrypt la primera vez que recibe tráfico para ese host.
+
+La plataforma debe tener HTTPS habilitado con redirección por aplicación
+(`https_enabled = true`, `https_redirect_all = false`), para que las apps sin
+dominio puedan seguir sirviéndose por HTTP en la misma VM.
+
+## Verificación
+
+```bash
+curl -I http://techretai.sachadev.me      # 308 → https
+curl -I https://techretai.sachadev.me     # 200
+ssh -i $KEY $VM 'docker inspect --format "{{.State.Health.Status}}" techretai-app-1'
+```
 
 ## Costos
 
-Container Instances y una VM E2.1.Micro entran en el **Always Free / Free Tier**
-de OCI para prototipos. Revisá los límites vigentes de tu cuenta antes de
-escalar.
+La VM, la IP reservada y el tráfico entran en el **Always Free** de OCI mientras
+el consumo total del tenancy no supere sus límites (los cupos de Ampere A1 se
+comparten entre todas las aplicaciones). El único costo variable es el uso de la
+API de Gemini.

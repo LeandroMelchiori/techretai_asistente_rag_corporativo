@@ -1,7 +1,6 @@
 # 🤖 TechRetAI — Asistente RAG Corporativo
 
 [![Tests](https://github.com/LeandroMelchiori/techretai_asistente_rag_corporativo/actions/workflows/ci.yml/badge.svg)](https://github.com/LeandroMelchiori/techretai_asistente_rag_corporativo/actions/workflows/ci.yml)
-[![Deploy a OCI](https://github.com/LeandroMelchiori/techretai_asistente_rag_corporativo/actions/workflows/deploy.yml/badge.svg)](https://github.com/LeandroMelchiori/techretai_asistente_rag_corporativo/actions/workflows/deploy.yml)
 
 > **TechRetAI** es un proyecto demostrativo que simula el asistente conversacional
 > interno de TechRetail Solutions S.R.L. Responde preguntas de los colaboradores
@@ -22,9 +21,9 @@ suficientemente relevante.
 
 ![TechRetAI en producción sobre OCI](docs/img/demo_agente.png)
 
-> Desplegado en una VM de **Oracle Cloud Infrastructure** (Always Free), servido
-> por Streamlit detrás de **Caddy** (HTTPS con certificado de Let's Encrypt) y
-> actualizado automáticamente vía **GitHub Actions** en cada push a `main`.
+> Desplegado como contenedor en la plataforma **Docker + Traefik** de **Oracle
+> Cloud Infrastructure** (VM Ampere A1 Always Free administrada con Terraform),
+> con HTTPS de Let's Encrypt gestionado por Traefik.
 
 ---
 
@@ -46,8 +45,9 @@ suficientemente relevante.
   renombrado y eliminación, preguntas de ejemplo, fuentes y feedback.
 - **Registro de ejecución:** consultas, relevancia, fuentes, latencia y feedback en
   formato JSON Lines para auditoría y análisis.
-- **Desplegado en OCI:** ejecución como servicio `systemd` en una VM.
-- **CI/CD:** despliegue automático mediante GitHub Actions con cada push a `main`.
+- **Desplegado en OCI:** contenedor endurecido (usuario sin privilegios, filesystem
+  de solo lectura) detrás de Traefik, en una VM compartida con otras aplicaciones.
+- **CI:** tests automáticos con GitHub Actions en cada push.
 
 ---
 
@@ -88,8 +88,8 @@ Cada componente del pipeline vive en un módulo con una única responsabilidad:
 | Generación y fallback | `src/agent.py` |
 | Proveedores de IA | `src/providers.py` |
 | Interfaz | `app/streamlit_app.py` |
-| Despliegue en OCI | `docs/deploy_oci.md`, `deploy/techretai.service`, `Dockerfile` |
-| CI/CD | `.github/workflows/deploy.yml` |
+| Despliegue en OCI | `docs/deploy_oci.md`, `deploy/oci/compose.yaml`, `Dockerfile` |
+| CI | `.github/workflows/ci.yml` |
 | Tests y evaluación | `tests/`, `eval/evaluar.py` |
 | Registro de ejecución | `src/logging_utils.py`, `logs/consultas.jsonl` |
 
@@ -192,8 +192,9 @@ python -m eval.evaluar
 - **Chunking por párrafos con superposición:** preserva el contexto sin cortar
   ideas; el conteo de tokens usa *tiktoken* con *fallback* local para no depender
   de la red al indexar.
-- **VM + `systemd` en vez de Kubernetes:** el volumen no justifica orquestación;
-  simple, Always Free y sobrevive reinicios. El `Dockerfile` queda para portabilidad.
+- **Contenedor en una VM compartida en vez de Kubernetes:** el volumen no
+  justifica orquestación; una VM Always Free con Docker + Traefik aloja varias
+  aplicaciones y la infraestructura vive como código en otro repositorio.
 - **Defensa contra *prompt injection* indirecto:** los documentos se tratan como
   **datos no confiables**, no como instrucciones. Se aíslan en bloques delimitados,
   se sanitiza el texto para que un documento no pueda falsificar esos delimitadores
@@ -234,8 +235,8 @@ techretai_asistente_rag_corporativo/
 ├── app/streamlit_app.py       # Interfaz de chat
 ├── tests/                     # Tests automatizados (pytest)
 ├── eval/                      # Set y script de evaluación del RAG
-├── deploy/techretai.service   # Servicio systemd
-├── .github/workflows/         # CI (tests) + CD (deploy a OCI)
+├── deploy/oci/compose.yaml    # Servicio para la plataforma Docker + Traefik
+├── .github/workflows/         # CI (tests)
 ├── docs/deploy_oci.md         # Guía de despliegue
 ├── Dockerfile
 ├── requirements.txt
@@ -246,10 +247,9 @@ techretai_asistente_rag_corporativo/
 
 ## ☁️ Despliegue en OCI
 
-El agente está desplegado en **Oracle Cloud Infrastructure**, sobre una VM
-Compute (Always Free), donde corre como servicio `systemd`. El pipeline de
-**GitHub Actions** actualiza automáticamente la aplicación con cada push a
-`main`.
+El agente está desplegado en **Oracle Cloud Infrastructure** como contenedor de
+la plataforma Docker + Traefik: una VM Ampere A1 (Always Free) definida con
+Terraform que aloja varias aplicaciones detrás de un único proxy con HTTPS.
 
 La guía completa está disponible en [`docs/deploy_oci.md`](docs/deploy_oci.md).
 
@@ -257,7 +257,9 @@ También puede ejecutarse con Docker:
 
 ```bash
 docker build -t techretai-agente .
-docker run -p 8501:8501 --env-file .env techretai-agente
+# Indexa los documentos en un volumen y luego levanta la interfaz
+docker run --rm --env-file .env -v techretai-data:/data techretai-agente python -m scripts.ingest
+docker run -p 8501:8501 --env-file .env -v techretai-data:/data techretai-agente
 ```
 
 ---

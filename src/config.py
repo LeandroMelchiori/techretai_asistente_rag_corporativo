@@ -36,8 +36,8 @@ class Settings:
     openai_api_key: str = field(default_factory=lambda: _get("OPENAI_API_KEY", ""))
 
     # --- Modelos ---
-    gemini_chat_model: str = field(default_factory=lambda: _get("GEMINI_CHAT_MODEL", "gemini-1.5-flash"))
-    gemini_embed_model: str = field(default_factory=lambda: _get("GEMINI_EMBED_MODEL", "text-embedding-004"))
+    gemini_chat_model: str = field(default_factory=lambda: _get("GEMINI_CHAT_MODEL", "gemini-3.8-flash"))
+    gemini_embed_model: str = field(default_factory=lambda: _get("GEMINI_EMBED_MODEL", "gemini-embedding-2"))
     openai_chat_model: str = field(default_factory=lambda: _get("OPENAI_CHAT_MODEL", "gpt-4o-mini"))
     openai_embed_model: str = field(default_factory=lambda: _get("OPENAI_EMBED_MODEL", "text-embedding-3-small"))
 
