@@ -51,8 +51,8 @@ def test_responde_usando_el_contexto(monkeypatch):
 def test_fuentes_sin_duplicados(monkeypatch):
     frags = [
         _frag("a.md", "rrhh", 0.7),
-        _frag("a.md", "rrhh", 0.6),  # mismo documento repetido
-        _frag("b.md", "legal", 0.55),
+        _frag("a.md", "rrhh", 0.68),  # mismo documento repetido
+        _frag("b.md", "legal", 0.66),
     ]
     monkeypatch.setattr(agent.vectorstore, "query", lambda *a, **k: frags)
     monkeypatch.setattr(agent, "generate", lambda s, u: "ok")
@@ -62,3 +62,27 @@ def test_fuentes_sin_duplicados(monkeypatch):
     archivos = [f["archivo"] for f in r.fuentes]
     assert archivos.count("a.md") == 1  # deduplicado
     assert "b.md" in archivos
+
+
+def test_descarta_fuentes_lejos_del_mejor_resultado(monkeypatch):
+    # Superan el umbral absoluto, pero quedan muy por debajo del mejor: no se citan
+    # ni llegan al contexto del LLM.
+    frags = [
+        _frag("vacaciones.docx", "rrhh", 0.70),
+        _frag("beneficios.html", "rrhh", 0.64),
+        _frag("planes_y_precios.xlsx", "comercial", 0.55),
+    ]
+    monkeypatch.setattr(agent.vectorstore, "query", lambda *a, **k: frags)
+    capturado = {}
+
+    def fake_generate(system_prompt, user_prompt):
+        capturado["user"] = user_prompt
+        return "ok"
+
+    monkeypatch.setattr(agent, "generate", fake_generate)
+
+    r = agent.responder("¿cuántos días de vacaciones tengo?")
+
+    archivos = [f["archivo"] for f in r.fuentes]
+    assert archivos == ["vacaciones.docx", "beneficios.html"]
+    assert "planes_y_precios.xlsx" not in capturado["user"]

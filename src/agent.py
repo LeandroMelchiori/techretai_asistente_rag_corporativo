@@ -98,7 +98,9 @@ def responder(pregunta: str, categoria: Optional[str] = None) -> Respuesta:
     relevancia_max = max((f["relevancia"] for f in fragmentos), default=0.0)
 
     # Control de alucinación: si nada es suficientemente relevante, fallback.
-    relevantes = [f for f in fragmentos if f["relevancia"] >= settings.min_relevance]
+    # De lo recuperado sólo se usan (y se citan) los fragmentos cercanos al mejor.
+    corte = max(settings.min_relevance, relevancia_max - settings.relevance_margin)
+    relevantes = [f for f in fragmentos if f["relevancia"] >= corte]
     if not relevantes:
         return Respuesta(
             pregunta=pregunta,

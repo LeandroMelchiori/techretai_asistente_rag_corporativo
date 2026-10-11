@@ -12,6 +12,7 @@ Ejecutar con:  streamlit run app/streamlit_app.py
 """
 from __future__ import annotations
 
+import html
 import sys
 from pathlib import Path
 
@@ -28,6 +29,30 @@ TITULO_NUEVA = "Nueva conversación"
 AVATAR = {"assistant": ":material/smart_toy:", "user": ":material/person:"}
 
 st.set_page_config(page_title="TechRetAI", page_icon=":material/smart_toy:", layout="centered")
+
+CATEGORIAS = {
+    "rrhh": "RR. HH.",
+    "financiero": "Financiero",
+    "legal": "Legal",
+    "operacional": "Operaciones",
+    "comercial": "Comercial",
+    "estrategico": "Estratégico",
+    "datos_sistemas": "Datos y sistemas",
+}
+
+
+def nivel_relevancia(valor: float) -> tuple[str, str]:
+    """Traduce la similitud coseno a un nivel legible.
+
+    Con gemini-embedding-2 la similitud entre textos sin relación ya ronda 0,5,
+    así que un porcentaje crudo confunde. Cortes calibrados con eval/.
+    """
+    if valor >= 0.70:
+        return "alta", "Relevancia alta"
+    if valor >= 0.60:
+        return "media", "Relevancia media"
+    return "baja", "Relevancia baja"
+
 
 EJEMPLOS = [
     (":material/beach_access:", "¿Cuántos días de vacaciones me corresponden con 6 años de antigüedad?"),
@@ -66,8 +91,19 @@ st.markdown(
     .subt { color: var(--muted); font-size: 1.02rem; line-height: 1.5; }
     .seccion { font-size: 1rem; font-weight: 600; margin: 1.1rem 0 .5rem; }
 
-    /* Franja decorativa superior de Streamlit: fuera, para un encabezado más limpio */
-    [data-testid="stDecoration"] { display: none; }
+    /* Franja decorativa superior e indicador "Running/Stop" de Streamlit: fuera.
+       El progreso ya se informa dentro del chat ("Buscando en los documentos…"). */
+    [data-testid="stDecoration"], [data-testid="stStatusWidget"] { display: none; }
+
+    /* Fuentes citadas: nivel de relevancia como etiqueta */
+    .fuente { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem .6rem; padding: .3rem 0; }
+    .fuente .archivo { font-weight: 600; overflow-wrap: anywhere; }
+    .fuente .meta { color: var(--muted); font-size: .9rem; }
+    .fuente .nivel {
+        font-size: .78rem; font-weight: 600; line-height: 1; padding: .3rem .55rem;
+        border-radius: 999px; border: 1px solid var(--border); white-space: nowrap;
+    }
+    .fuente .nivel.alta { color: var(--accent); border-color: var(--accent); }
 
     /* Base de todos los botones: objetivo táctil de 44px y foco visible.
        Selector descendiente: con "help", Streamlit envuelve el botón en un tooltip. */
@@ -83,7 +119,7 @@ st.markdown(
     /* Preguntas sugeridas: tarjetas con el texto completo (salto de línea).
        La altura mínima admite tres líneas para que las tarjetas de una fila coincidan. */
     div[class*="st-key-ej_"] button {
-        justify-content: flex-start; align-items: flex-start; text-align: left; gap: .6rem;
+        justify-content: flex-start; align-items: center; text-align: left; gap: .6rem;
         min-height: 5.9rem; padding: .8rem .9rem;
         background: var(--surface); border: 1px solid var(--border);
         transition: border-color .2s ease, background-color .2s ease;
@@ -103,7 +139,11 @@ st.markdown(
     div[class*="st-key-conv_"] button[kind="primary"] p { color: var(--on-accent); font-weight: 700; }
 
     /* Botones sólo con ícono: el texto queda disponible para lectores de pantalla */
-    div[class*="st-key-ed_"] button, div[class*="st-key-del_"] button { position: relative; padding: 0 .6rem; }
+    div[class*="st-key-ed_"] button, div[class*="st-key-del_"] button {
+        position: relative; padding: 0 .6rem; justify-content: center; min-width: 44px;
+    }
+    /* Sin texto visible al lado, el margen derecho del ícono lo descentraría */
+    div[class*="st-key-ed_"] button span, div[class*="st-key-del_"] button span { margin: 0; }
     div[class*="st-key-ed_"] button p, div[class*="st-key-del_"] button p {
         position: absolute; width: 1px; height: 1px; overflow: hidden;
         clip: rect(0 0 0 0); white-space: nowrap;
@@ -301,19 +341,26 @@ st.markdown(
 
 conv = conv_actual()
 
+# Las sugerencias viven en un único espacio reservado: al empezar la conversación
+# se vacía en el acto. Sin esto, Streamlit sigue mostrando las tarjetas del render
+# anterior (atenuadas) mientras se genera la primera respuesta.
+inicio = st.empty()
+
 if conv["mensajes"]:
+    inicio.empty()
     # Si la conversación fue renombrada, su título completo (que en la barra lateral
     # puede verse recortado) no aparece en el chat: se muestra acá.
     if conv["titulo"] != conv["mensajes"][0]["texto"][:120]:
         st.caption(f":material/forum: {conv['titulo']}")
 else:
-    st.markdown("<div class='seccion'>Probá con una de estas preguntas</div>", unsafe_allow_html=True)
-    # Fila por fila, para que las tarjetas de cada fila queden alineadas.
-    for fila in range(0, len(EJEMPLOS), 2):
-        cols = st.columns(2)
-        for col, (i, (icono, ejemplo)) in zip(cols, enumerate(EJEMPLOS[fila:fila + 2], start=fila)):
-            if col.button(ejemplo, key=f"ej_{i}", icon=icono, use_container_width=True):
-                procesar(ejemplo)
+    with inicio.container():
+        st.markdown("<div class='seccion'>Probá con una de estas preguntas</div>", unsafe_allow_html=True)
+        # Fila por fila, para que las tarjetas de cada fila queden alineadas.
+        for fila in range(0, len(EJEMPLOS), 2):
+            cols = st.columns(2)
+            for col, (i, (icono, ejemplo)) in zip(cols, enumerate(EJEMPLOS[fila:fila + 2], start=fila)):
+                if col.button(ejemplo, key=f"ej_{i}", icon=icono, use_container_width=True):
+                    procesar(ejemplo)
 
 for i, msg in enumerate(conv["mensajes"]):
     with st.chat_message(msg["rol"], avatar=AVATAR[msg["rol"]]):
@@ -325,11 +372,18 @@ for i, msg in enumerate(conv["mensajes"]):
             st.markdown(msg["texto"])
         if msg.get("fuentes"):
             with st.expander("Fuentes citadas", icon=":material/description:"):
+                filas = []
                 for f in msg["fuentes"]:
-                    st.markdown(
-                        f"- **{f['archivo']}** · {f['categoria']} · {f['formato'].upper()} "
-                        f"· relevancia {f['relevancia']:.0%}"
+                    clase, etiqueta = nivel_relevancia(f["relevancia"])
+                    categoria = CATEGORIAS.get(f["categoria"], f["categoria"])
+                    filas.append(
+                        "<div class='fuente'>"
+                        f"<span class='archivo'>{html.escape(f['archivo'])}</span>"
+                        f"<span class='meta'>{html.escape(categoria)} · {html.escape(f['formato'].upper())}</span>"
+                        f"<span class='nivel {clase}' title='Similitud {f['relevancia']:.2f}'>{etiqueta}</span>"
+                        "</div>"
                     )
+                st.markdown("".join(filas), unsafe_allow_html=True)
         if msg["rol"] == "assistant" and msg.get("respuesta_obj"):
             if msg.get("feedback_dado"):
                 # Confirmación explícita: un widget deshabilitado no deja ver qué se eligió.

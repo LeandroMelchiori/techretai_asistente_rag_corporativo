@@ -211,7 +211,8 @@ Todas las opciones se controlan por variables de entorno definidas en
 |---|---:|---|
 | `LLM_PROVIDER` | `gemini` | Proveedor: `gemini` u `openai` |
 | `TOP_K` | `5` | Fragmentos recuperados por consulta |
-| `MIN_RELEVANCE` | `0.25` | Umbral mínimo de relevancia |
+| `MIN_RELEVANCE` | `0.53` | Similitud mínima para responder (calibrada con `eval/`) |
+| `RELEVANCE_MARGIN` | `0.08` | Sólo se usan y citan fragmentos a esta distancia del mejor |
 | `CHUNK_SIZE` | `800` | Tamaño de cada fragmento |
 
 ---

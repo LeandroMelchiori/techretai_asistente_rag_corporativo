@@ -36,7 +36,7 @@ class Settings:
     openai_api_key: str = field(default_factory=lambda: _get("OPENAI_API_KEY", ""))
 
     # --- Modelos ---
-    gemini_chat_model: str = field(default_factory=lambda: _get("GEMINI_CHAT_MODEL", "gemini-3.8-flash"))
+    gemini_chat_model: str = field(default_factory=lambda: _get("GEMINI_CHAT_MODEL", "gemini-3.5-flash-lite"))
     gemini_embed_model: str = field(default_factory=lambda: _get("GEMINI_EMBED_MODEL", "gemini-embedding-2"))
     openai_chat_model: str = field(default_factory=lambda: _get("OPENAI_CHAT_MODEL", "gpt-4o-mini"))
     openai_embed_model: str = field(default_factory=lambda: _get("OPENAI_EMBED_MODEL", "text-embedding-3-small"))
@@ -45,7 +45,12 @@ class Settings:
     chunk_size: int = field(default_factory=lambda: int(_get("CHUNK_SIZE", "800")))
     chunk_overlap: int = field(default_factory=lambda: int(_get("CHUNK_OVERLAP", "120")))
     top_k: int = field(default_factory=lambda: int(_get("TOP_K", "5")))
-    min_relevance: float = field(default_factory=lambda: float(_get("MIN_RELEVANCE", "0.25")))
+    # Calibrado con eval/preguntas_eval.json para gemini-embedding-2: la similitud
+    # coseno tiene un piso alto (~0,5 incluso entre textos sin relación), así que
+    # el umbral absoluto sólo descarta lo claramente ajeno y el margen deja fuera
+    # los fragmentos muy por debajo del mejor resultado.
+    min_relevance: float = field(default_factory=lambda: float(_get("MIN_RELEVANCE", "0.53")))
+    relevance_margin: float = field(default_factory=lambda: float(_get("RELEVANCE_MARGIN", "0.08")))
 
     # --- Rutas ---
     docs_dir: Path = field(default_factory=lambda: BASE_DIR / _get("DOCS_DIR", "documentos"))
