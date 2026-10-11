@@ -2,28 +2,74 @@
 
 [![Tests](https://github.com/LeandroMelchiori/techretai_asistente_rag_corporativo/actions/workflows/ci.yml/badge.svg)](https://github.com/LeandroMelchiori/techretai_asistente_rag_corporativo/actions/workflows/ci.yml)
 
-> **TechRetAI** es un proyecto demostrativo que simula el asistente conversacional
-> interno de TechRetail Solutions S.R.L. Responde preguntas de los colaboradores
-> basándose en documentación corporativa ficticia y muestra las fuentes utilizadas.
+Asistente que responde preguntas sobre la documentación interna de una empresa,
+**cita las fuentes** y **se niega a responder** cuando la información no está en
+los documentos. Está en producción, con evaluación propia, defensa contra
+*prompt injection* y límites de uso.
 
-**TechRetail Solutions S.R.L.** representa una plataforma SaaS de e-commerce para
-PyMEs y emprendedores en Argentina. El asistente ingiere documentación interna en
-**8 formatos distintos**, la indexa en una base vectorial y responde mediante
-**RAG** (*Retrieval-Augmented Generation*), incorporando mecanismos para reducir
-respuestas no fundamentadas y rechazar consultas cuando no encuentra contexto
-suficientemente relevante.
+**Demo en vivo: [techretai.sachadev.me](https://techretai.sachadev.me)** ·
+Infraestructura como código: [infrastructure-as-code](https://github.com/LeandroMelchiori/infrastructure-as-code)
+
+![TechRetAI respondiendo con la fuente citada](docs/img/techretai_conversacion.png)
+
+> Escenario ficticio: **TechRetail Solutions S.R.L.**, una plataforma SaaS de
+> e-commerce para PyMEs en Argentina, con 15 documentos internos en 8 formatos
+> (PDF, Word, Excel, PowerPoint, Markdown, CSV, JSON y HTML) y 7 áreas.
 
 ---
 
-## 🌐 En producción
+## 📊 Resultados
 
-**TechRetAI está desplegado y accesible en vivo:** **[https://techretai.sachadev.me](https://techretai.sachadev.me)**
+Medidos con [`eval/preguntas_eval.json`](eval/preguntas_eval.json) (18 preguntas
+del dominio y 3 fuera de alcance), `gemini-embedding-2` y `gemini-3.5-flash-lite`:
 
-![TechRetAI en producción sobre OCI](docs/img/demo_agente.png)
+| Métrica | Resultado |
+|---|---|
+| **Hit@5**: el documento correcto está entre los 5 recuperados | **100 %** (18/18) |
+| **MRR**: qué tan arriba aparece el documento correcto | **0,972** (17/18 en primer lugar) |
+| Preguntas fuera de alcance rechazadas | **3/3** (2 por el umbral, 1 por el modelo) |
+| Latencia en el servidor (recuperación + generación) | **p50 1,4 s · p95 2,5 s** |
+| Tests automatizados en CI | **25** |
 
-> Desplegado como contenedor en la plataforma **Docker + Traefik** de **Oracle
-> Cloud Infrastructure** (VM Ampere A1 Always Free administrada con Terraform),
-> con HTTPS de Let's Encrypt gestionado por Traefik.
+El set es chico a propósito para iterar rápido; ampliarlo (casos multi-documento,
+ataques y fidelidad de la respuesta) es el próximo paso de la [hoja de ruta](#-hoja-de-ruta).
+
+---
+
+## 🔧 Decisiones basadas en mediciones
+
+**Calibrar la relevancia en lugar de confiar en un umbral fijo.** Con
+`gemini-embedding-2` la similitud coseno tiene un piso alto: preguntas sin
+relación (una receta de pizza, el Mundial 2022) puntúan entre 0,49 y 0,55, y el
+documento correcto entre 0,56 y 0,81. El umbral original de 0,25 no filtraba nada
+y la interfaz citaba los cinco documentos recuperados aunque no tuvieran relación.
+Con el set de evaluación lo calibré a **0,53** y agregué un **margen relativo**:
+sólo se usan y se citan los fragmentos a menos de 0,08 del mejor resultado. La
+similitud se muestra como relevancia alta, media o baja, no como un porcentaje que
+se lee como "coincidencia".
+
+**Elegir el modelo por latencia medida.** `gemini-3.8-flash` tardaba entre 48 y
+92 s por respuesta. Comparé modelos con el mismo flujo y las mismas preguntas:
+`gemini-3.5-flash-lite` respondió correctamente en ~3 s, y la respuesta además se
+muestra en *streaming* a medida que se genera.
+
+---
+
+## 🛡️ Ingeniería de producción
+
+- **Infraestructura como código:** VM Ampere A1 (Always Free) en OCI con Docker y
+  Traefik, definida con Terraform en un repositorio separado y compartida con otras
+  aplicaciones. IP pública reservada.
+- **Contenedor endurecido:** usuario sin privilegios, *filesystem* de solo lectura,
+  `cap_drop: ALL`, `no-new-privileges`, límites de CPU y memoria, *healthcheck* y
+  ningún puerto publicado en el host ([`deploy/oci/compose.yaml`](deploy/oci/compose.yaml)).
+- **HTTPS** con certificados de Let's Encrypt, por aplicación.
+- **Límites de uso:** 15 preguntas cada 10 minutos por IP, 300 por día y 500
+  caracteres por pregunta. La IP la fija Traefik; verifiqué que un cliente no puede
+  falsificarla con `X-Real-Ip` ni `X-Forwarded-For`.
+- **Prompt injection indirecto:** los documentos se tratan como datos no
+  confiables, aislados en bloques delimitados y sanitizados, con tests de ataque.
+- **Secretos fuera del repositorio:** la API key vive en la VM con permisos de root.
 
 ---
 
@@ -31,23 +77,17 @@ suficientemente relevante.
 
 - **Multi-formato:** procesa PDF, Word (`.docx`), Excel (`.xlsx`), PowerPoint
   (`.pptx`), Markdown, CSV, JSON y HTML.
-- **Multi-dominio:** documentos organizados por área (RH, Financiero, Legal,
-  Operacional, Comercial, Estratégico, Datos y Sistemas).
 - **RAG completo:** extracción → limpieza → *chunking* → *embeddings* → base
   vectorial → recuperación semántica → generación con citación de fuentes.
-- **Control de respuestas no fundamentadas:** si ningún fragmento supera el
-  umbral de relevancia, el agente informa que no encontró la respuesta en vez de
-  solicitar una generación sin contexto suficiente.
-- **Citación de fuentes:** cada respuesta indica los documentos utilizados.
+- **Control de respuestas no fundamentadas:** si nada es suficientemente
+  relevante, informa que no encontró la respuesta en vez de inventarla.
+- **Respuestas en *streaming*** y fuentes citadas con su nivel de relevancia.
 - **Proveedor intercambiable:** Google Gemini (por defecto) u OpenAI, cambiando
   una sola variable de entorno.
-- **Interfaz de chat:** múltiples conversaciones con historial de sesión, creación,
-  renombrado y eliminación, preguntas de ejemplo, fuentes y feedback.
+- **Interfaz de chat:** múltiples conversaciones, preguntas sugeridas, feedback y
+  diseño accesible (objetivos táctiles de 44 px, foco visible, adaptada a celular).
 - **Registro de ejecución:** consultas, relevancia, fuentes, latencia y feedback en
-  formato JSON Lines para auditoría y análisis.
-- **Desplegado en OCI:** contenedor endurecido (usuario sin privilegios, filesystem
-  de solo lectura) detrás de Traefik, en una VM compartida con otras aplicaciones.
-- **CI:** tests automáticos con GitHub Actions en cada push.
+  JSON Lines para auditoría y análisis.
 
 ---
 
@@ -152,8 +192,9 @@ python -m scripts.preguntar "¿Cuántos días de vacaciones me corresponden?"
 ## 🔬 Tests y evaluación
 
 **Tests automatizados** (unitarios, sin dependencias externas) que corren en CI
-en cada push — cubren limpieza y *chunking*, extractores de formato y la lógica
-del agente (fallback anti-alucinación y deduplicación de fuentes):
+en cada push: limpieza y *chunking*, extractores de formato, lógica del agente
+(fallback, deduplicación y filtrado de fuentes, respuesta en *streaming*), límites
+de uso y ataques de *prompt injection*:
 
 ```bash
 pip install -r requirements-dev.txt
@@ -167,6 +208,8 @@ debe rechazar. Mide la calidad, no solo que "funcione":
 ```bash
 python -m eval.evaluar
 ```
+
+Los resultados actuales están en la sección [Resultados](#-resultados).
 
 | Métrica | Qué mide |
 |---|---|
@@ -281,14 +324,14 @@ ruta.
 
 ---
 
-# 🗺️ Hoja de ruta
+## 🗺️ Hoja de ruta
 
 La evolución del proyecto se resume en diez mejoras prioritarias:
 
-1. [x] **Evaluación del RAG:** conjunto de preguntas de referencia con métricas de recuperación (Hit@k, MRR) y rechazo correcto. _Pendiente: groundedness, latencia y costo._
+1. [x] **Evaluación del RAG:** conjunto de preguntas de referencia con métricas de recuperación (Hit@k, MRR) y rechazo correcto. _Latencia medida (p50/p95). Pendiente: fidelidad de la respuesta y costo._
 2. [x] **Pruebas y calidad de código:** pruebas unitarias con mocks de proveedores y CI en cada push. _Pendiente: cobertura, linting, formateo y tipos._
 3. [x] **Seguridad frente a prompt injection:** documentos tratados como datos no confiables, aislados en bloques delimitados y sanitizados, con prompt del sistema reforzado y tests de ataque indirecto. _Pendiente: validación de salida y ataques directos más sofisticados._
-4. [ ] **Autenticación y permisos:** agregar usuarios, roles, sesiones, rate limiting y autorización por área durante la recuperación.
+4. [ ] **Autenticación y permisos:** agregar usuarios, roles, sesiones y autorización por área durante la recuperación. _Hecho: límites de uso por IP y por día._
 5. [ ] **Privacidad y logs:** anonimizar datos sensibles, permitir desactivar el registro de contenido y definir rotación y retención de logs.
 6. [ ] **Resiliencia y manejo de errores:** ocultar errores técnicos, agregar timeouts, reintentos, health checks y fallback entre proveedores.
 7. [ ] **Citaciones verificables:** guardar página, hoja, diapositiva o sección y permitir revisar el fragmento exacto utilizado.
