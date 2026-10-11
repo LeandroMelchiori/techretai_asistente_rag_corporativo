@@ -13,7 +13,9 @@ Ejecutar con:  streamlit run app/streamlit_app.py
 from __future__ import annotations
 
 import html
+import math
 import sys
+import uuid
 from pathlib import Path
 
 import streamlit as st
@@ -21,8 +23,9 @@ import streamlit as st
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src import vectorstore  # noqa: E402
-from src.agent import responder  # noqa: E402
+from src.agent import responder_en_vivo  # noqa: E402
 from src.config import settings  # noqa: E402
+from src.limites import Decision, LimitadorDeConsultas  # noqa: E402
 from src.logging_utils import registrar  # noqa: E402
 
 TITULO_NUEVA = "Nueva conversación"
@@ -207,6 +210,38 @@ def eliminar(cid: int) -> None:
 
 
 # --------------------------------------------------------------------------
+#  Límites de uso (protegen la cuota de la API key)
+# --------------------------------------------------------------------------
+@st.cache_resource
+def limitador() -> LimitadorDeConsultas:
+    """Un único limitador compartido por todas las sesiones del proceso."""
+    return LimitadorDeConsultas(
+        por_cliente=settings.rate_limit_per_client,
+        ventana_s=settings.rate_limit_window_min * 60,
+        por_dia=settings.rate_limit_daily,
+    )
+
+
+def cliente_id() -> str:
+    """Identifica al cliente por su IP (la informa Traefik) o, si no, por sesión."""
+    ip = st.context.headers.get("X-Real-Ip", "").strip()
+    if ip:
+        return ip
+    return st.session_state.setdefault("sesion_id", uuid.uuid4().hex)
+
+
+def aviso_limite(decision: Decision) -> str:
+    if decision.motivo == "global":
+        return "El asistente alcanzó el límite diario de consultas. Volvé a intentarlo más tarde."
+    if decision.espera_s < 60:
+        espera = f"{decision.espera_s} segundos"
+    else:
+        minutos = math.ceil(decision.espera_s / 60)
+        espera = f"{minutos} minuto{'s' if minutos != 1 else ''}"
+    return f"Hiciste varias preguntas seguidas. Podés volver a preguntar en {espera}."
+
+
+# --------------------------------------------------------------------------
 #  Procesamiento de una pregunta (sobre la conversación activa)
 # --------------------------------------------------------------------------
 def procesar(pregunta: str) -> None:
@@ -216,6 +251,8 @@ def procesar(pregunta: str) -> None:
     carga, para no congelar la interfaz durante la llamada al LLM.
     """
     conv = conv_actual()
+    # El campo ya limita el largo; se repite acá por si llega un mensaje armado a mano.
+    pregunta = pregunta[: settings.max_question_chars] if settings.max_question_chars else pregunta
     conv["mensajes"].append({"rol": "user", "texto": pregunta})
     if conv["titulo"] == TITULO_NUEVA:
         # El título completo se recorta visualmente en la barra lateral (CSS).
@@ -224,32 +261,39 @@ def procesar(pregunta: str) -> None:
 
 
 def responder_pendiente(conv: dict) -> None:
-    """Si la última intervención es del usuario, genera la respuesta con feedback de carga."""
+    """Genera la respuesta a la última pregunta y la muestra a medida que se escribe."""
+    decision = limitador().permitir(cliente_id())
+    if not decision.permitido:
+        conv["mensajes"].append({"rol": "assistant", "texto": aviso_limite(decision), "aviso": True})
+        st.rerun()
+
     with st.chat_message("assistant", avatar=AVATAR["assistant"]):
-        with st.spinner("Buscando en los documentos…"):
-            try:
-                settings.validate()
-                resp = responder(conv["mensajes"][-1]["texto"])
-                registrar(resp)
-                conv["mensajes"].append(
-                    {
-                        "rol": "assistant",
-                        "texto": resp.texto,
-                        "fuentes": resp.fuentes,
-                        "respuesta_obj": resp,
-                        "feedback_dado": False,
-                    }
-                )
-            except Exception as e:  # noqa: BLE001
-                conv["mensajes"].append(
-                    {
-                        "rol": "assistant",
-                        "texto": "No pude generar la respuesta. Probá de nuevo en unos segundos.",
-                        "detalle": str(e)[:300],
-                        "error": True,
-                        "fuentes": [],
-                    }
-                )
+        try:
+            settings.validate()
+            with st.spinner("Buscando en los documentos…"):
+                resp, partes = responder_en_vivo(conv["mensajes"][-1]["texto"])
+            st.write_stream(partes)
+            registrar(resp)
+            conv["mensajes"].append(
+                {
+                    "rol": "assistant",
+                    "texto": resp.texto,
+                    "fuentes": resp.fuentes,
+                    "respuesta_obj": resp,
+                    "feedback_dado": False,
+                }
+            )
+        except Exception as e:  # noqa: BLE001
+            conv["mensajes"].append(
+                {
+                    "rol": "assistant",
+                    "texto": "No pude generar la respuesta. Probá de nuevo en unos segundos.",
+                    "detalle": str(e)[:300],
+                    "error": True,
+                    "fuentes": [],
+                }
+            )
+    # Re-render para mostrar fuentes y feedback debajo de la respuesta ya escrita.
     st.rerun()
 
 
@@ -368,6 +412,8 @@ for i, msg in enumerate(conv["mensajes"]):
             st.error(msg["texto"], icon=":material/error:")
             if msg.get("detalle"):
                 st.caption(f"Detalle técnico: {msg['detalle']}")
+        elif msg.get("aviso"):
+            st.info(msg["texto"], icon=":material/hourglass_top:")
         else:
             st.markdown(msg["texto"])
         if msg.get("fuentes"):
@@ -402,10 +448,17 @@ for i, msg in enumerate(conv["mensajes"]):
 
 
 # Si la última intervención es del usuario, la respuesta está pendiente de generarse.
-if conv["mensajes"] and conv["mensajes"][-1]["rol"] == "user":
-    responder_pendiente(conv)
+pendiente = bool(conv["mensajes"]) and conv["mensajes"][-1]["rol"] == "user"
 
-
-pregunta = st.chat_input("Escribí tu pregunta…")
+# El campo se dibuja antes de generar (siempre queda abajo) y se deshabilita
+# mientras se escribe la respuesta, para no cortarla con otra pregunta.
+pregunta = st.chat_input(
+    "Escribí tu pregunta…",
+    max_chars=settings.max_question_chars or None,
+    disabled=pendiente,
+)
 if pregunta:
     procesar(pregunta)
+
+if pendiente:
+    responder_pendiente(conv)

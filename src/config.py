@@ -52,6 +52,12 @@ class Settings:
     min_relevance: float = field(default_factory=lambda: float(_get("MIN_RELEVANCE", "0.53")))
     relevance_margin: float = field(default_factory=lambda: float(_get("RELEVANCE_MARGIN", "0.08")))
 
+    # --- Límites de uso (protegen la cuota de la API key; 0 = sin límite) ---
+    rate_limit_per_client: int = field(default_factory=lambda: int(_get("RATE_LIMIT_PER_CLIENT", "15")))
+    rate_limit_window_min: int = field(default_factory=lambda: int(_get("RATE_LIMIT_WINDOW_MIN", "10")))
+    rate_limit_daily: int = field(default_factory=lambda: int(_get("RATE_LIMIT_DAILY", "300")))
+    max_question_chars: int = field(default_factory=lambda: int(_get("MAX_QUESTION_CHARS", "500")))
+
     # --- Rutas ---
     docs_dir: Path = field(default_factory=lambda: BASE_DIR / _get("DOCS_DIR", "documentos"))
     chroma_dir: Path = field(default_factory=lambda: BASE_DIR / _get("CHROMA_DIR", "data/chroma"))

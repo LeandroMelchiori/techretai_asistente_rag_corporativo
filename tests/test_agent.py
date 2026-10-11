@@ -64,6 +64,38 @@ def test_fuentes_sin_duplicados(monkeypatch):
     assert "b.md" in archivos
 
 
+def test_responder_en_vivo_entrega_partes_y_completa_la_respuesta(monkeypatch):
+    monkeypatch.setattr(
+        agent.vectorstore, "query", lambda *a, **k: [_frag("vacaciones.docx", "rrhh", 0.82)]
+    )
+    monkeypatch.setattr(agent, "generate_stream", lambda s, u: iter(["Te corresponden ", "21 días."]))
+
+    resp, partes = agent.responder_en_vivo("¿cuántos días de vacaciones tengo?")
+
+    # Las fuentes están disponibles antes de generar el texto.
+    assert [f["archivo"] for f in resp.fuentes] == ["vacaciones.docx"]
+    assert resp.texto == ""
+    assert list(partes) == ["Te corresponden ", "21 días."]
+    assert resp.texto == "Te corresponden 21 días."
+    assert resp.contexto_encontrado is True
+
+
+def test_responder_en_vivo_sin_contexto_no_llama_al_llm(monkeypatch):
+    monkeypatch.setattr(agent.vectorstore, "query", lambda *a, **k: [_frag("x.md", "rrhh", 0.05)])
+
+    def no_deberia_llamarse(s, u):
+        raise AssertionError("no debe generar sin contexto")
+
+    monkeypatch.setattr(agent, "generate_stream", no_deberia_llamarse)
+
+    resp, partes = agent.responder_en_vivo("pregunta sin relación")
+
+    assert "".join(partes) == agent.FALLBACK
+    assert resp.texto == agent.FALLBACK
+    assert resp.contexto_encontrado is False
+    assert resp.fuentes == []
+
+
 def test_descarta_fuentes_lejos_del_mejor_resultado(monkeypatch):
     # Superan el umbral absoluto, pero quedan muy por debajo del mejor: no se citan
     # ni llegan al contexto del LLM.

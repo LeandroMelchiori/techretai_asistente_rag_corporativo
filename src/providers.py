@@ -3,14 +3,16 @@ Capa de proveedores: aísla al resto del código de qué LLM / modelo de
 embeddings se usa. Cambiar de Gemini a OpenAI (o a futuro OCI Generative AI)
 es solo cambiar ``LLM_PROVIDER`` en el .env.
 
-Expone dos funciones de alto nivel:
+Expone tres funciones de alto nivel:
     - embed_texts(textos, is_query=False) -> lista de vectores
     - generate(system_prompt, user_prompt) -> texto de respuesta
+    - generate_stream(system_prompt, user_prompt) -> partes del texto a medida
+      que el modelo las genera (para mostrarlas en vivo en la interfaz)
 """
 from __future__ import annotations
 
 from functools import lru_cache
-from typing import List
+from typing import Iterator, List
 
 from .config import settings
 
@@ -54,6 +56,27 @@ def _gemini_generate(system_prompt: str, user_prompt: str) -> str:
     return (resp.text or "").strip()
 
 
+def _gemini_generate_stream(system_prompt: str, user_prompt: str) -> Iterator[str]:
+    genai = _gemini()
+    model = genai.GenerativeModel(
+        model_name=settings.gemini_chat_model,
+        system_instruction=system_prompt,
+    )
+    resp = model.generate_content(
+        user_prompt,
+        generation_config={"temperature": 0.2},
+        stream=True,
+    )
+    for parte in resp:
+        try:
+            texto = parte.text
+        except ValueError:
+            # Partes sin texto (p. ej. sólo metadatos de cierre): se ignoran.
+            continue
+        if texto:
+            yield texto
+
+
 # --------------------------------------------------------------------------
 #  OpenAI
 # --------------------------------------------------------------------------
@@ -83,6 +106,22 @@ def _openai_generate(system_prompt: str, user_prompt: str) -> str:
     return (resp.choices[0].message.content or "").strip()
 
 
+def _openai_generate_stream(system_prompt: str, user_prompt: str) -> Iterator[str]:
+    client = _openai()
+    resp = client.chat.completions.create(
+        model=settings.openai_chat_model,
+        temperature=0.2,
+        stream=True,
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+    )
+    for parte in resp:
+        if parte.choices and parte.choices[0].delta.content:
+            yield parte.choices[0].delta.content
+
+
 # --------------------------------------------------------------------------
 #  Interfaz pública
 # --------------------------------------------------------------------------
@@ -104,3 +143,10 @@ def generate(system_prompt: str, user_prompt: str) -> str:
     if settings.provider == "gemini":
         return _gemini_generate(system_prompt, user_prompt)
     return _openai_generate(system_prompt, user_prompt)
+
+
+def generate_stream(system_prompt: str, user_prompt: str) -> Iterator[str]:
+    """Como ``generate``, pero entrega el texto en partes a medida que se genera."""
+    if settings.provider == "gemini":
+        return _gemini_generate_stream(system_prompt, user_prompt)
+    return _openai_generate_stream(system_prompt, user_prompt)

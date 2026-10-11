@@ -111,6 +111,23 @@ La plataforma debe tener HTTPS habilitado con redirección por aplicación
 (`https_enabled = true`, `https_redirect_all = false`), para que las apps sin
 dominio puedan seguir sirviéndose por HTTP en la misma VM.
 
+## Límites de uso
+
+La app es pública, así que limita el consumo de la API key:
+
+- **Por cliente:** `RATE_LIMIT_PER_CLIENT` preguntas cada `RATE_LIMIT_WINDOW_MIN`
+  minutos (15 cada 10 por defecto). El cliente se identifica por `X-Real-Ip`,
+  que Traefik reemplaza con la IP real: un cliente no puede falsificarlo.
+- **Global:** `RATE_LIMIT_DAILY` preguntas por día entre todos (300 por defecto).
+- **Largo:** `MAX_QUESTION_CHARS` caracteres por pregunta (500 por defecto).
+
+Los contadores viven en memoria y se reinician con el contenedor. Para ajustar
+los valores, agregarlos al `.env` de la aplicación y repetir el paso 4.
+
+Como segunda barrera, conviene fijar en Google Cloud una cuota diaria para la
+Generative Language API y, si el proyecto tiene facturación, una alerta de
+presupuesto.
+
 ## Verificación
 
 ```bash

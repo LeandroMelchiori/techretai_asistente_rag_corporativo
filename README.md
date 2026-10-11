@@ -213,6 +213,9 @@ Todas las opciones se controlan por variables de entorno definidas en
 | `TOP_K` | `5` | Fragmentos recuperados por consulta |
 | `MIN_RELEVANCE` | `0.53` | Similitud mínima para responder (calibrada con `eval/`) |
 | `RELEVANCE_MARGIN` | `0.08` | Sólo se usan y citan fragmentos a esta distancia del mejor |
+| `RATE_LIMIT_PER_CLIENT` / `RATE_LIMIT_WINDOW_MIN` | `15` / `10` | Preguntas por IP cada 10 minutos |
+| `RATE_LIMIT_DAILY` | `300` | Preguntas por día entre todos los usuarios |
+| `MAX_QUESTION_CHARS` | `500` | Largo máximo de una pregunta |
 | `CHUNK_SIZE` | `800` | Tamaño de cada fragmento |
 
 ---
