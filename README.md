@@ -324,7 +324,7 @@ ruta.
 
 ---
 
-## 🗺️ Hoja de ruta
+## 🧭 Hoja de ruta
 
 La evolución del proyecto se resume en diez mejoras prioritarias:
 
