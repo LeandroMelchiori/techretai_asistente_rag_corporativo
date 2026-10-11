@@ -133,6 +133,14 @@ st.markdown(
     div[class*="st-key-ej_"] button span { color: var(--accent); flex-shrink: 0; }
     div[class*="st-key-ej_"] button:hover { border-color: var(--accent); background: var(--surface-hover); }
 
+    /* Con "help", Streamlit envuelve el botón en un contenedor de tooltip que toma el
+       ancho de su contenido: se lo ajusta al de la columna para alinear la fila. */
+    div[class*="st-key-conv_"] [data-testid="stTooltipHoverTarget"],
+    div[class*="st-key-ed_"] [data-testid="stTooltipHoverTarget"],
+    div[class*="st-key-del_"] [data-testid="stTooltipHoverTarget"] { width: 100%; min-width: 0; }
+    div[class*="st-key-conv_"] button, div[class*="st-key-ed_"] button,
+    div[class*="st-key-del_"] button { width: 100%; }
+
     /* Conversaciones de la barra lateral: una línea con elipsis */
     div[class*="st-key-conv_"] button { justify-content: flex-start; text-align: left; padding: .5rem .75rem; }
     div[class*="st-key-conv_"] button > div { min-width: 0; max-width: 100%; }
@@ -156,7 +164,9 @@ st.markdown(
     /* Pantallas angostas: las tarjetas van en una columna y no necesitan igualar alturas */
     @media (max-width: 640px) {
         div[class*="st-key-ej_"] button { min-height: 0; }
-        [data-testid="stMainBlockContainer"] { padding-top: 3.5rem; }
+        /* Streamlit limita el contenido a 318px y lo centra: queda más angosto que el
+           campo de pregunta. Con 100% ambos comparten el margen lateral de 16px. */
+        [data-testid="stMainBlockContainer"] { padding-top: 3.5rem; max-width: 100%; }
         .marca { font-size: 2rem; }
     }
 
@@ -345,17 +355,21 @@ with st.sidebar:
                 st.rerun()
         else:
             # Fila normal: seleccionar | renombrar | eliminar.
-            sel, ren, dele = st.columns([0.68, 0.16, 0.16], gap="small", vertical_alignment="center")
+            # Las columnas de los íconos admiten 44px y sus botones ocupan todo el ancho:
+            # así la fila termina exactamente donde termina el resto de la barra lateral.
+            sel, ren, dele = st.columns([0.6, 0.2, 0.2], gap="small", vertical_alignment="center")
             if sel.button(
                 conv["titulo"], key=f"conv_{cid}", use_container_width=True,
                 type="primary" if activa else "secondary", help=conv["titulo"],
             ):
                 st.session_state.conv_actual = cid
                 st.rerun()
-            if ren.button("Renombrar", key=f"ed_{cid}", icon=":material/edit:", help="Renombrar"):
+            if ren.button("Renombrar", key=f"ed_{cid}", icon=":material/edit:", help="Renombrar",
+                          use_container_width=True):
                 st.session_state.renombrando = cid
                 st.rerun()
-            if dele.button("Eliminar", key=f"del_{cid}", icon=":material/delete:", help="Eliminar"):
+            if dele.button("Eliminar", key=f"del_{cid}", icon=":material/delete:", help="Eliminar",
+                           use_container_width=True):
                 eliminar(cid)
                 st.rerun()
 
