@@ -9,6 +9,7 @@ font = "sans serif"
 
 [server]
 headless = true
+enableStaticServing = true          # Sirve app/static/ (version.txt, usado para verificar los despliegues).
 
 [client]
 toolbarMode = "minimal"             # Sin opciones de desarrollador (p. ej. "Deploy") para los usuarios.

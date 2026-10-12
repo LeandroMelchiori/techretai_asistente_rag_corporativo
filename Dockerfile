@@ -25,6 +25,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Código y documentos.
 COPY . .
 
+# Versión publicada en /app/static/version.txt: el pipeline la consulta para
+# confirmar que el despliegue llegó a producción.
+ARG GIT_SHA=local
+RUN mkdir -p app/static && printf '%s\n' "$GIT_SHA" > app/static/version.txt
+
 # Usuario con UID fijo y /data con su dueño: el volumen nombrado hereda estos
 # permisos la primera vez que se monta.
 RUN useradd --uid 10001 --no-create-home --shell /usr/sbin/nologin techretai \

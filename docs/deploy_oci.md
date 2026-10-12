@@ -66,9 +66,37 @@ printf 'GOOGLE_API_KEY=%s\n' "$k" | sudo install -o root -g root -m 0600 /dev/st
 Usá una API key exclusiva para TechRetAI: la plataforma comparte la VM con otras
 aplicaciones y root/Docker pueden inspeccionar las variables de los contenedores.
 
-## 2. Construir la imagen
+## 2. Imagen y despliegue automático
 
-La VM es ARM64, así que la imagen se construye ahí mismo a partir de un commit:
+Cada push a `main` que pasa los tests dispara el workflow
+[`Deploy a OCI`](../.github/workflows/deploy.yml):
+
+1. Construye la imagen ARM64 en un runner de GitHub y la publica en
+   `ghcr.io/leandromelchiori/techretai`, con el SHA del commit y la etiqueta `main`.
+2. En la VM, el temporizador `techretai-autodeploy.timer` revisa cada 3 minutos esa
+   etiqueta. Si cambió, despliega la imagen fijada por digest y espera a que el
+   contenedor quede *healthy*; si no lo logra, vuelve a la versión anterior y no
+   reintenta la fallida ([`deploy/oci/autodeploy/`](../deploy/oci/autodeploy/)).
+3. El workflow consulta `https://techretai.sachadev.me/app/static/version.txt`
+   hasta ver el SHA nuevo: el despliegue sólo figura como exitoso si llegó a
+   producción.
+
+GitHub no necesita acceso a la VM (el SSH sigue restringido a la IP del operador)
+ni credenciales de OCI: la VM sólo descarga una imagen pública.
+
+Instalación del temporizador (una sola vez):
+
+```bash
+scp -i $KEY deploy/oci/autodeploy/* $VM:/tmp/
+ssh -i $KEY $VM 'sudo install -o root -g root -m 0755 /tmp/techretai-autodeploy.sh /usr/local/sbin/techretai-autodeploy \
+  && sudo install -o root -g root -m 0644 /tmp/techretai-autodeploy.service /tmp/techretai-autodeploy.timer /etc/systemd/system/ \
+  && sudo systemctl daemon-reload && sudo systemctl enable --now techretai-autodeploy.timer'
+```
+
+Los despliegues quedan registrados en `journalctl -u techretai-autodeploy`.
+
+**Construcción manual (alternativa).** La VM es ARM64, así que la imagen también
+se puede construir ahí mismo a partir de un commit:
 
 ```bash
 SHA=$(git rev-parse --short=7 HEAD)
@@ -98,8 +126,8 @@ ssh -i $KEY $VM 'cd /opt/apps/apps/techretai && sudo docker compose \
   up -d app && docker ps --filter name=techretai'
 ```
 
-Para actualizar: repetir el paso 2 con el nuevo commit y luego el paso 4. Para
-volver atrás, escribir en `.env` el tag anterior y repetir el paso 4.
+Las actualizaciones las hace el despliegue automático. Para volver atrás a mano,
+escribir en `.env` la imagen anterior (`ghcr.io/...@sha256:...`) y repetir el paso 4.
 
 ## 5. DNS y HTTPS
 

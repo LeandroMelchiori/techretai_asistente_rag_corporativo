@@ -1,0 +1,9 @@
+[Unit]
+Description=Revisa cada 3 minutos si hay una versión nueva de TechRetAI
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=3min
+
+[Install]
+WantedBy=timers.target

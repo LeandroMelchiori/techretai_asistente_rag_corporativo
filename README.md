@@ -1,6 +1,7 @@
 # 🤖 TechRetAI — Asistente RAG Corporativo
 
 [![Tests](https://github.com/LeandroMelchiori/techretai_asistente_rag_corporativo/actions/workflows/ci.yml/badge.svg)](https://github.com/LeandroMelchiori/techretai_asistente_rag_corporativo/actions/workflows/ci.yml)
+[![Deploy a OCI](https://github.com/LeandroMelchiori/techretai_asistente_rag_corporativo/actions/workflows/deploy.yml/badge.svg)](https://github.com/LeandroMelchiori/techretai_asistente_rag_corporativo/actions/workflows/deploy.yml)
 
 Asistente que responde preguntas sobre la documentación interna de una empresa,
 **cita las fuentes** y **se niega a responder** cuando la información no está en
@@ -69,6 +70,10 @@ muestra en *streaming* a medida que se genera.
   falsificarla con `X-Real-Ip` ni `X-Forwarded-For`.
 - **Prompt injection indirecto:** los documentos se tratan como datos no
   confiables, aislados en bloques delimitados y sanitizados, con tests de ataque.
+- **Despliegue continuo:** cada push a `main` que pasa los tests construye la imagen
+  ARM64 en GitHub Actions y la publica en GHCR; la VM la despliega sola, fijada por
+  digest, y vuelve a la versión anterior si no queda *healthy*. El pipeline espera
+  a ver la versión nueva en producción. Sin SSH ni credenciales de OCI en GitHub.
 - **Secretos fuera del repositorio:** la API key vive en la VM con permisos de root.
 
 ---
@@ -129,7 +134,7 @@ Cada componente del pipeline vive en un módulo con una única responsabilidad:
 | Proveedores de IA | `src/providers.py` |
 | Interfaz | `app/streamlit_app.py` |
 | Despliegue en OCI | `docs/deploy_oci.md`, `deploy/oci/compose.yaml`, `Dockerfile` |
-| CI | `.github/workflows/ci.yml` |
+| CI/CD | `.github/workflows/ci.yml`, `.github/workflows/deploy.yml`, `deploy/oci/autodeploy/` |
 | Tests y evaluación | `tests/`, `eval/evaluar.py` |
 | Registro de ejecución | `src/logging_utils.py`, `logs/consultas.jsonl` |
 
@@ -283,7 +288,8 @@ techretai_asistente_rag_corporativo/
 ├── tests/                     # Tests automatizados (pytest)
 ├── eval/                      # Set y script de evaluación del RAG
 ├── deploy/oci/compose.yaml    # Servicio para la plataforma Docker + Traefik
-├── .github/workflows/         # CI (tests)
+├── deploy/oci/autodeploy/     # Despliegue automático en la VM (systemd)
+├── .github/workflows/         # CI (tests) + CD (imagen en GHCR y verificación)
 ├── docs/deploy_oci.md         # Guía de despliegue
 ├── Dockerfile
 ├── requirements.txt
@@ -296,7 +302,8 @@ techretai_asistente_rag_corporativo/
 
 El agente está desplegado en **Oracle Cloud Infrastructure** como contenedor de
 la plataforma Docker + Traefik: una VM Ampere A1 (Always Free) definida con
-Terraform que aloja varias aplicaciones detrás de un único proxy con HTTPS.
+Terraform que aloja varias aplicaciones detrás de un único proxy con HTTPS. Cada
+push a `main` que pasa los tests se despliega automáticamente.
 
 La guía completa está disponible en [`docs/deploy_oci.md`](docs/deploy_oci.md).
 
