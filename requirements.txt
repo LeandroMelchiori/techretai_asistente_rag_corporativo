@@ -1,5 +1,5 @@
 # --- Núcleo del agente ---
-chromadb>=0.5.5             # Base de datos vectorial (embebida)
+chromadb==1.5.9            # Base de datos vectorial (embebida). Fija: el formato del índice en disco depende de la versión
 tiktoken==0.7.0            # Conteo de tokens (opcional: hay fallback local)
 
 # --- Proveedores de LLM / embeddings (intercambiables por .env) ---
