@@ -13,6 +13,7 @@ from typing import Dict, List
 import chromadb
 
 from .config import settings
+from .perfil import perfil_activo
 from .providers import embed_texts
 
 
@@ -22,11 +23,11 @@ def _client() -> "chromadb.ClientAPI":
 
 
 def get_collection():
-    """Devuelve (creando si hace falta) la colección de documentos."""
+    """Devuelve (creando si hace falta) la colección de documentos de la empresa."""
     client = _client()
     # Distancia coseno: estándar para similitud semántica de textos.
     return client.get_or_create_collection(
-        name=settings.collection_name,
+        name=perfil_activo().coleccion,
         metadata={"hnsw:space": "cosine"},
     )
 
@@ -35,22 +36,38 @@ def reset_collection():
     """Borra y recrea la colección (útil para reindexar desde cero)."""
     client = _client()
     try:
-        client.delete_collection(settings.collection_name)
+        client.delete_collection(perfil_activo().coleccion)
     except Exception:
         pass
-    return client.get_or_create_collection(
-        name=settings.collection_name,
-        metadata={"hnsw:space": "cosine"},
-    )
+    return get_collection()
 
 
-def add_chunks(ids: List[str], textos: List[str], metadatos: List[Dict]) -> None:
-    """Genera embeddings de los fragmentos y los inserta en la colección."""
-    if not textos:
-        return
-    coleccion = get_collection()
+def firmas_indexadas() -> Dict[str, str]:
+    """Ruta de cada documento indexado -> firma con la que se indexó.
+
+    Los índices anteriores a las firmas devuelven una firma vacía, así que esos
+    documentos se reindexan la próxima vez.
+    """
+    metadatos = get_collection().get(include=["metadatas"])["metadatas"]
+    return {m["ruta"]: m.get("firma", "") for m in metadatos if m and "ruta" in m}
+
+
+def reemplazar_documento(ruta: str, textos: List[str], metadatos: List[Dict]) -> None:
+    """Reemplaza todos los fragmentos de un documento por los nuevos.
+
+    Los embeddings se generan antes de borrar: si la API falla, el documento
+    conserva su versión anterior en lugar de desaparecer del índice.
+    """
     vectores = embed_texts(textos, is_query=False)
+    coleccion = get_collection()
+    coleccion.delete(where={"ruta": ruta})
+    ids = [f"{ruta}::{i}" for i in range(len(textos))]
     coleccion.add(ids=ids, embeddings=vectores, documents=textos, metadatas=metadatos)
+
+
+def quitar_documento(ruta: str) -> None:
+    """Elimina del índice todos los fragmentos de un documento."""
+    get_collection().delete(where={"ruta": ruta})
 
 
 def query(pregunta: str, top_k: int | None = None, categoria: str | None = None) -> List[Dict]:

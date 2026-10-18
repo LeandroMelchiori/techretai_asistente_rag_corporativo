@@ -1,0 +1,8 @@
+zona,servicio,plazo,costo
+Rosario y Gran Rosario,Envío en el día,Mismo día comprando antes de las 13 h,$4.500
+Rosario y Gran Rosario,Retiro en el local,Desde el día hábil siguiente,Sin costo
+Provincias de Santa Fe y Córdoba,Correo a domicilio,2 a 4 días hábiles,$9.800
+CABA y Gran Buenos Aires,Correo a domicilio,3 a 5 días hábiles,$10.900
+Resto del país,Correo a domicilio,4 a 7 días hábiles,$12.500
+Patagonia,Correo a domicilio,5 a 9 días hábiles,$14.900
+Todo el país,Transporte (productos voluminosos),Según cotización,Se cotiza por pedido

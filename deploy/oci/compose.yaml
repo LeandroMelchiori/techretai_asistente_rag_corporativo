@@ -20,6 +20,7 @@ x-hardening: &hardening
   pids_limit: 256
   environment:
     LLM_PROVIDER: gemini
+    PERFIL: ${PERFIL:-perfiles/techretail}
     GOOGLE_API_KEY: ${GOOGLE_API_KEY:?GOOGLE_API_KEY is required}
     GEMINI_CHAT_MODEL: ${GEMINI_CHAT_MODEL:?GEMINI_CHAT_MODEL is required}
     GEMINI_EMBED_MODEL: ${GEMINI_EMBED_MODEL:?GEMINI_EMBED_MODEL is required}
@@ -60,8 +61,9 @@ services:
       traefik.http.middlewares.techretai-https.redirectscheme.scheme: https
       traefik.http.middlewares.techretai-https.redirectscheme.permanent: "true"
 
-  # Indexación de los documentos en el volumen. Se ejecuta a demanda:
-  #   docker compose --profile ops run --rm ingest
+  # Indexación de los documentos en el volumen. Se ejecuta a demanda y los
+  # documentos llegan por la entrada estándar (no están en la imagen):
+  #   tar -c documentos | docker compose --profile ops run --rm -T ingest
   ingest:
     <<: *hardening
     profiles:
@@ -69,7 +71,7 @@ services:
     restart: "no"
     cpus: 0.50
     mem_limit: 768m
-    command: ["python", "-m", "scripts.ingest", "--reset"]
+    command: ["python", "-m", "scripts.ingest", "--tar", "-"]
     networks:
       - egress
 

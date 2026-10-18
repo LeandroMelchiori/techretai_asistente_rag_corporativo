@@ -10,6 +10,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Optional
 
 from dotenv import load_dotenv
 
@@ -24,6 +25,12 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 def _get(name: str, default: str) -> str:
     value = os.getenv(name)
     return value if value not in (None, "") else default
+
+
+def _ruta_opcional(name: str) -> Optional[Path]:
+    """Ruta relativa a la raíz del repositorio (o absoluta), o None si no se definió."""
+    value = _get(name, "")
+    return BASE_DIR / value if value else None
 
 
 @dataclass
@@ -45,7 +52,7 @@ class Settings:
     chunk_size: int = field(default_factory=lambda: int(_get("CHUNK_SIZE", "800")))
     chunk_overlap: int = field(default_factory=lambda: int(_get("CHUNK_OVERLAP", "120")))
     top_k: int = field(default_factory=lambda: int(_get("TOP_K", "5")))
-    # Calibrado con eval/preguntas_eval.json para gemini-embedding-2: la similitud
+    # Calibrado con perfiles/techretail/preguntas_eval.json para gemini-embedding-2: la similitud
     # coseno tiene un piso alto (~0,5 incluso entre textos sin relación), así que
     # el umbral absoluto sólo descarta lo claramente ajeno y el margen deja fuera
     # los fragmentos muy por debajo del mejor resultado.
@@ -59,12 +66,21 @@ class Settings:
     max_question_chars: int = field(default_factory=lambda: int(_get("MAX_QUESTION_CHARS", "500")))
 
     # --- Rutas ---
-    docs_dir: Path = field(default_factory=lambda: BASE_DIR / _get("DOCS_DIR", "documentos"))
+    # Perfil de la empresa (perfil.toml, documentos/ y set de evaluación).
+    perfil_dir: Path = field(default_factory=lambda: BASE_DIR / _get("PERFIL", "perfiles/techretail"))
+    # Sin DOCS_DIR, se usa la carpeta documentos/ del perfil.
+    docs_dir: Optional[Path] = field(default_factory=lambda: _ruta_opcional("DOCS_DIR"))
     chroma_dir: Path = field(default_factory=lambda: BASE_DIR / _get("CHROMA_DIR", "data/chroma"))
     log_file: Path = field(default_factory=lambda: BASE_DIR / _get("LOG_FILE", "logs/consultas.jsonl"))
 
-    # Nombre de la colección dentro de Chroma.
-    collection_name: str = "techretail_docs"
+    def __post_init__(self) -> None:
+        if self.docs_dir is None:
+            self.docs_dir = self.perfil_dir / "documentos"
+
+    @property
+    def embed_model(self) -> str:
+        """Modelo de embeddings del proveedor activo."""
+        return self.openai_embed_model if self.provider == "openai" else self.gemini_embed_model
 
     def validate(self) -> None:
         """Verifica que exista la credencial del proveedor seleccionado."""

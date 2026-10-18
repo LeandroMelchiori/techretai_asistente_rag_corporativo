@@ -66,6 +66,9 @@ printf 'GOOGLE_API_KEY=%s\n' "$k" | sudo install -o root -g root -m 0600 /dev/st
 Usá una API key exclusiva para TechRetAI: la plataforma comparte la VM con otras
 aplicaciones y root/Docker pueden inspeccionar las variables de los contenedores.
 
+La empresa se elige con `PERFIL` en el `.env` de la aplicación (por defecto,
+`perfiles/techretail`).
+
 ## 2. Imagen y despliegue automático
 
 Cada push a `main` que pasa los tests dispara el workflow
@@ -109,14 +112,21 @@ El `.env` de la aplicación también fija los modelos de Gemini
 
 ## 3. Indexar los documentos
 
-Crea la colección de ChromaDB dentro del volumen `techretai-data`. Se repite sólo
-cuando cambian los documentos o el modelo de embeddings:
+Los documentos no están en la imagen (es pública). Se envían desde el equipo del
+operador como un archivo tar por la entrada estándar; el servicio `ingest` los
+extrae en `/tmp`, sincroniza la colección de ChromaDB del volumen
+`techretai-data` y no los guarda en la VM:
 
 ```bash
-ssh -i $KEY $VM 'cd /opt/apps/apps/techretai && sudo docker compose \
+tar -C perfiles/techretail -c documentos | ssh -i $KEY $VM 'cd /opt/apps/apps/techretai && sudo docker compose \
   --env-file .env --env-file /etc/docker-platform/apps/techretai/runtime.env \
-  --profile ops run --rm ingest'
+  --profile ops run --rm -T ingest'
 ```
+
+La sincronización es incremental: sólo genera embeddings de los documentos nuevos
+o modificados y quita los que ya no están. Si cambia el modelo de embeddings, se
+reindexa todo automáticamente. Para indexar otro perfil, agregar
+`-e PERFIL=perfiles/<empresa>` después de `run` y enviar sus documentos.
 
 ## 4. Levantar o actualizar el servicio
 

@@ -1,1 +1,1 @@
-"""Agente RAG Corporativo de TechRetail Solutions S.R.L."""
+"""Agente RAG corporativo. La empresa se define con un perfil (ver perfiles/)."""

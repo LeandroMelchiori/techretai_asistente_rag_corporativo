@@ -16,12 +16,16 @@ Infraestructura como código: [infrastructure-as-code](https://github.com/Leandr
 > Escenario ficticio: **TechRetail Solutions S.R.L.**, una plataforma SaaS de
 > e-commerce para PyMEs en Argentina, con 15 documentos internos en 8 formatos
 > (PDF, Word, Excel, PowerPoint, Markdown, CSV, JSON y HTML) y 7 áreas.
+>
+> El asistente se configura por empresa. El repositorio incluye un segundo perfil,
+> la tienda ficticia **Nogal Deco**, que funciona con el mismo código
+> ([cómo adaptarlo a otra empresa](#-adaptarlo-a-otra-empresa)).
 
 ---
 
 ## 📊 Resultados
 
-Medidos con [`eval/preguntas_eval.json`](eval/preguntas_eval.json) (18 preguntas
+Medidos con [`perfiles/techretail/preguntas_eval.json`](perfiles/techretail/preguntas_eval.json) (18 preguntas
 del dominio y 3 fuera de alcance), `gemini-embedding-2` y `gemini-3.5-flash-lite`:
 
 | Métrica | Resultado |
@@ -30,7 +34,7 @@ del dominio y 3 fuera de alcance), `gemini-embedding-2` y `gemini-3.5-flash-lite
 | **MRR**: qué tan arriba aparece el documento correcto | **0,972** (17/18 en primer lugar) |
 | Preguntas fuera de alcance rechazadas | **3/3** (2 por el umbral, 1 por el modelo) |
 | Latencia en el servidor (recuperación + generación) | **p50 1,4 s · p95 2,5 s** |
-| Tests automatizados en CI | **25** |
+| Tests automatizados en CI | **48** |
 
 El set es chico a propósito para iterar rápido; ampliarlo (casos multi-documento,
 ataques y fidelidad de la respuesta) es el próximo paso de la [hoja de ruta](#-hoja-de-ruta).
@@ -87,6 +91,10 @@ muestra en *streaming* a medida que se genera.
 - **Control de respuestas no fundamentadas:** si nada es suficientemente
   relevante, informa que no encontró la respuesta en vez de inventarla.
 - **Respuestas en *streaming*** y fuentes citadas con su nivel de relevancia.
+- **Configurable por empresa:** nombre, textos, categorías, preguntas sugeridas,
+  documentos y set de evaluación viven en un perfil (`perfiles/<empresa>/`).
+- **Indexación incremental:** sólo se generan embeddings de los documentos nuevos
+  o modificados; los borrados se quitan del índice.
 - **Proveedor intercambiable:** Google Gemini (por defecto) u OpenAI, cambiando
   una sola variable de entorno.
 - **Interfaz de chat:** múltiples conversaciones, preguntas sugeridas, feedback y
@@ -126,9 +134,10 @@ Cada componente del pipeline vive en un módulo con una única responsabilidad:
 
 | Fase del pipeline | Dónde está en el código |
 |---|---|
-| Colecta y organización | `documentos/` + `scripts/generar_documentos.py` |
+| Perfil de empresa | `perfiles/<empresa>/perfil.toml`, `src/perfil.py` |
+| Colecta y organización | `perfiles/<empresa>/documentos/` + `scripts/generar_documentos.py` |
 | Proceso y extracción | `src/ingestion/loaders.py`, `src/ingestion/chunking.py` |
-| Indexación | `src/vectorstore.py`, `scripts/ingest.py` |
+| Indexación | `src/ingestion/indexar.py`, `src/vectorstore.py`, `scripts/ingest.py` |
 | Recuperación RAG | `src/vectorstore.py::query`, `src/agent.py` |
 | Generación y fallback | `src/agent.py` |
 | Proveedores de IA | `src/providers.py` |
@@ -167,9 +176,12 @@ Completá en `.env` la API key del proveedor elegido.
 ### 3. Generar los documentos e indexarlos
 
 ```bash
-python -m scripts.generar_documentos
-python -m scripts.ingest --reset
+python -m scripts.generar_documentos   # documentos binarios de TechRetail
+python -m scripts.ingest
 ```
+
+Por defecto se usa el perfil de TechRetail. Para probar la tienda, agregá
+`PERFIL=perfiles/nogal` al `.env` (o a la variable de entorno) y volvé a indexar.
 
 ### 4. Usar el agente
 
@@ -199,16 +211,19 @@ python -m scripts.preguntar "¿Cuántos días de vacaciones me corresponden?"
 **Tests automatizados** (unitarios, sin dependencias externas) que corren en CI
 en cada push: limpieza y *chunking*, extractores de formato, lógica del agente
 (fallback, deduplicación y filtrado de fuentes, respuesta en *streaming*), límites
-de uso y ataques de *prompt injection*:
+de uso, ataques de *prompt injection*, validación de los perfiles de empresa y
+sincronización del índice (documentos nuevos, modificados y borrados, con una base
+Chroma real):
 
 ```bash
 pip install -r requirements-dev.txt
 pytest
 ```
 
-**Evaluación del RAG:** un set de casos (`eval/preguntas_eval.json`) con la
-fuente esperada de cada pregunta, más preguntas *fuera de alcance* que el agente
-debe rechazar. Mide la calidad, no solo que "funcione":
+**Evaluación del RAG:** cada perfil tiene su set de casos
+(`perfiles/<empresa>/preguntas_eval.json`) con la fuente esperada de cada
+pregunta, más preguntas *fuera de alcance* que el agente debe rechazar. Mide la
+calidad, no solo que "funcione":
 
 ```bash
 python -m eval.evaluar
@@ -250,6 +265,37 @@ Los resultados actuales están en la sección [Resultados](#-resultados).
 
 ---
 
+## 🏢 Adaptarlo a otra empresa
+
+El código no tiene nada específico de TechRetail. Todo lo que cambia de una
+empresa a otra vive en su carpeta de `perfiles/`:
+
+```text
+perfiles/<empresa>/
+├── perfil.toml           # nombre de la empresa y del asistente, textos, categorías y preguntas sugeridas
+├── documentos/<área>/    # los documentos; cada subcarpeta es una categoría
+└── preguntas_eval.json   # preguntas con su documento esperado, para medir la recuperación
+```
+
+1. Copiar `perfiles/techretail/perfil.toml` como punto de partida y completarlo.
+2. Poner los documentos en `documentos/`, una subcarpeta por área.
+3. Elegir el perfil con `PERFIL=perfiles/<empresa>`, indexar y evaluar:
+
+```bash
+python -m scripts.ingest
+python -m eval.evaluar
+```
+
+Cada perfil tiene su propia colección en la base vectorial, así que una empresa
+nunca recupera documentos de otra. Las reglas del prompt (responder sólo con los
+documentos, tratarlos como datos no confiables) son las mismas para todas; los
+tests lo verifican para cada perfil del repositorio.
+
+Los documentos no se incluyen en la imagen de Docker, que es pública: se envían
+al servidor como un archivo tar en el momento de indexar y no quedan guardados ahí.
+
+---
+
 ## ⚙️ Configuración
 
 Todas las opciones se controlan por variables de entorno definidas en
@@ -258,6 +304,8 @@ Todas las opciones se controlan por variables de entorno definidas en
 | Variable | Por defecto | Descripción |
 |---|---:|---|
 | `LLM_PROVIDER` | `gemini` | Proveedor: `gemini` u `openai` |
+| `PERFIL` | `perfiles/techretail` | Carpeta del perfil de la empresa |
+| `DOCS_DIR` | `<PERFIL>/documentos` | Carpeta de documentos a indexar |
 | `TOP_K` | `5` | Fragmentos recuperados por consulta |
 | `MIN_RELEVANCE` | `0.53` | Similitud mínima para responder (calibrada con `eval/`) |
 | `RELEVANCE_MARGIN` | `0.08` | Sólo se usan y citan fragmentos a esta distancia del mejor |
@@ -272,11 +320,14 @@ Todas las opciones se controlan por variables de entorno definidas en
 
 ```text
 techretai_asistente_rag_corporativo/
-├── documentos/                # Base ficticia: 8 formatos y 7 categorías
+├── perfiles/
+│   ├── techretail/            # perfil.toml, documentos/ (8 formatos) y set de evaluación
+│   └── nogal/                 # Segunda empresa ficticia: una tienda
 ├── src/
 │   ├── config.py              # Configuración central
+│   ├── perfil.py              # Perfil de la empresa activa
 │   ├── providers.py           # Gemini/OpenAI: LLM y embeddings
-│   ├── ingestion/             # Extracción, limpieza y chunking
+│   ├── ingestion/             # Extracción, limpieza, chunking e indexación incremental
 │   ├── vectorstore.py         # Base vectorial ChromaDB
 │   ├── agent.py               # Orquestación RAG, fuentes y fallback
 │   └── logging_utils.py       # Registro de ejecución
@@ -286,7 +337,7 @@ techretai_asistente_rag_corporativo/
 │   └── preguntar.py           # Cliente CLI
 ├── app/streamlit_app.py       # Interfaz de chat
 ├── tests/                     # Tests automatizados (pytest)
-├── eval/                      # Set y script de evaluación del RAG
+├── eval/                      # Script de evaluación del RAG
 ├── deploy/oci/compose.yaml    # Servicio para la plataforma Docker + Traefik
 ├── deploy/oci/autodeploy/     # Despliegue automático en la VM (systemd)
 ├── .github/workflows/         # CI (tests) + CD (imagen en GHCR y verificación)
@@ -311,8 +362,9 @@ También puede ejecutarse con Docker:
 
 ```bash
 docker build -t techretai-agente .
-# Indexa los documentos en un volumen y luego levanta la interfaz
-docker run --rm --env-file .env -v techretai-data:/data techretai-agente python -m scripts.ingest
+# Los documentos no están en la imagen: se envían como tar para indexarlos
+tar -C perfiles/techretail -c documentos | docker run -i --rm --env-file .env \
+  -v techretai-data:/data techretai-agente python -m scripts.ingest --tar -
 docker run -p 8501:8501 --env-file .env -v techretai-data:/data techretai-agente
 ```
 
@@ -320,7 +372,7 @@ docker run -p 8501:8501 --env-file .env -v techretai-data:/data techretai-agente
 
 ## 🧪 Datos y alcance
 
-Todos los documentos incluidos en `documentos/` son **datos ficticios**, creados
+Todos los documentos incluidos en `perfiles/*/documentos/` son **datos ficticios**, creados
 exclusivamente para demostrar el funcionamiento del asistente. No representan
 información real de una empresa ni contienen datos personales reales.
 
@@ -342,7 +394,7 @@ La evolución del proyecto se resume en diez mejoras prioritarias:
 5. [ ] **Privacidad y logs:** anonimizar datos sensibles, permitir desactivar el registro de contenido y definir rotación y retención de logs.
 6. [ ] **Resiliencia y manejo de errores:** ocultar errores técnicos, agregar timeouts, reintentos, health checks y fallback entre proveedores.
 7. [ ] **Citaciones verificables:** guardar página, hoja, diapositiva o sección y permitir revisar el fragmento exacto utilizado.
-8. [ ] **Mejora de recuperación:** evaluar chunking, búsqueda híbrida, reranking, eliminación de duplicados y reindexación incremental.
+8. [ ] **Mejora de recuperación:** evaluar chunking, búsqueda híbrida, reranking y eliminación de duplicados. _Hecho: reindexación incremental._
 9. [ ] **Observabilidad:** crear métricas de calidad, uso, latencia, errores, feedback y costo por proveedor y versión del sistema.
 10. [ ] **Evolución del producto:** persistir conversaciones, mejorar accesibilidad, administrar documentos desde una interfaz segura y separar el núcleo RAG de la interfaz para facilitar su escalabilidad.
 

@@ -1,0 +1,19 @@
+{
+  "descripcion": "Set de evaluación de la tienda ficticia Nogal Deco. Cada caso tiene la pregunta y el/los documento(s) fuente que deberían recuperarse. Los casos con fuente vacía son 'fuera de alcance': el agente debe rechazarlos. Incluye una pregunta de TechRetail para verificar que cada empresa sólo ve sus documentos.",
+  "casos": [
+    {"pregunta": "¿Cuánto cuesta el envío a Córdoba?", "fuentes": ["tarifas_envio.csv", "envios.md"]},
+    {"pregunta": "¿Hasta qué hora hay que comprar para recibir el pedido en el día en Rosario?", "fuentes": ["envios.md", "tarifas_envio.csv"]},
+    {"pregunta": "¿Desde qué monto el envío es gratis?", "fuentes": ["envios.md"]},
+    {"pregunta": "¿En cuántas cuotas sin interés se puede pagar?", "fuentes": ["medios_de_pago.md"]},
+    {"pregunta": "¿Hay descuento por pagar con transferencia?", "fuentes": ["medios_de_pago.md"]},
+    {"pregunta": "Un cliente responsable inscripto necesita factura A, ¿qué tiene que hacer?", "fuentes": ["medios_de_pago.md"]},
+    {"pregunta": "¿Cuántos días tiene un cliente para arrepentirse de una compra online?", "fuentes": ["cambios_y_devoluciones.md"]},
+    {"pregunta": "Un plato llegó roto, ¿qué tiene que hacer el cliente?", "fuentes": ["cambios_y_devoluciones.md", "garantia.html"]},
+    {"pregunta": "¿Cuánto dura la garantía de las luminarias LED?", "fuentes": ["garantia.html"]},
+    {"pregunta": "¿Puedo pasarle mi WhatsApp a un comprador que pregunta en Mercado Libre?", "fuentes": ["guia_respuestas_mercadolibre.md"]},
+    {"pregunta": "¿En cuánto tiempo hay que responder las preguntas de Mercado Libre?", "fuentes": ["guia_respuestas_mercadolibre.md"]},
+    {"pregunta": "¿Cuál es la capital de Australia?", "fuentes": []},
+    {"pregunta": "¿Qué receta de pizza me recomendás?", "fuentes": []},
+    {"pregunta": "¿Cuántos días de vacaciones me corresponden con 6 años de antigüedad?", "fuentes": []}
+  ]
+}

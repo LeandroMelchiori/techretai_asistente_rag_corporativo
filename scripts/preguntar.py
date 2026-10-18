@@ -16,6 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from src.agent import responder  # noqa: E402
 from src.config import settings  # noqa: E402
 from src.logging_utils import registrar  # noqa: E402
+from src.perfil import perfil_activo  # noqa: E402
 
 
 def _preguntar(texto: str) -> None:
@@ -35,7 +36,7 @@ def main() -> int:
         _preguntar(" ".join(sys.argv[1:]))
         return 0
 
-    print("Asistente TechRetail (escribí 'salir' para terminar)\n")
+    print(f"{perfil_activo().asistente} (escribí 'salir' para terminar)\n")
     while True:
         try:
             texto = input("Vos> ").strip()

@@ -1,0 +1,36 @@
+# Perfil de una tienda ficticia: muestra que el mismo asistente sirve para otra
+# empresa sin tocar código. Ver perfiles/techretail/perfil.toml para la referencia
+# de cada campo.
+
+id = "nogal"
+
+[empresa]
+nombre = "Nogal Deco"
+descripcion = "una tienda de decoración, iluminación y bazar de Rosario que vende por Mercado Libre y por su tienda online"
+
+[asistente]
+nombre = "Asistente Nogal"
+descripcion = "Asistente interno de Nogal Deco"
+bienvenida = "Preguntá por envíos, pagos, cambios, garantías o cómo responder en Mercado Libre."
+
+[categorias]
+ventas = "Ventas"
+envios = "Envíos"
+postventa = "Postventa"
+atencion = "Atención al cliente"
+
+[[sugerencias]]
+icono = ":material/local_shipping:"
+texto = "¿Cuánto tarda un envío a Córdoba y cuánto cuesta?"
+
+[[sugerencias]]
+icono = ":material/assignment_return:"
+texto = "Un cliente quiere devolver una lámpara a los 20 días de recibirla, ¿se puede?"
+
+[[sugerencias]]
+icono = ":material/credit_card:"
+texto = "¿En cuántas cuotas sin interés se puede pagar?"
+
+[[sugerencias]]
+icono = ":material/forum:"
+texto = "¿Cómo respondo una pregunta de Mercado Libre sobre stock?"

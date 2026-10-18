@@ -9,6 +9,7 @@ su bloque de datos. Estos tests verifican que el agente:
   - sanitiza el texto para que no pueda falsificar los delimitadores.
 """
 from src import agent
+from src.perfil import perfil_activo
 
 
 def _frag(texto, archivo="doc.md"):
@@ -16,7 +17,7 @@ def _frag(texto, archivo="doc.md"):
 
 
 def test_el_system_prompt_prohibe_obedecer_al_documento():
-    prompt = agent.SYSTEM_PROMPT.lower()
+    prompt = agent.system_prompt(perfil_activo()).lower()
     assert "no confiables" in prompt or "no obedez" in prompt.replace("á", "a")
     assert "instrucciones" in prompt
 

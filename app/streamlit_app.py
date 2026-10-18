@@ -1,5 +1,6 @@
 """
-Interfaz de chat del agente TechRetAI.
+Interfaz de chat del asistente. Nombre, textos, categorías y preguntas sugeridas
+vienen del perfil de la empresa (src/perfil.py).
 
 Chat web estilo asistente de IA: varias conversaciones con historial en la barra
 lateral (crear, renombrar, eliminar), marca propia, preguntas de ejemplo,
@@ -27,21 +28,23 @@ from src.agent import responder_en_vivo  # noqa: E402
 from src.config import settings  # noqa: E402
 from src.limites import Decision, LimitadorDeConsultas  # noqa: E402
 from src.logging_utils import registrar  # noqa: E402
+from src.perfil import Perfil, perfil_activo  # noqa: E402
 
 TITULO_NUEVA = "Nueva conversación"
 AVATAR = {"assistant": ":material/smart_toy:", "user": ":material/person:"}
 
-st.set_page_config(page_title="TechRetAI", page_icon=":material/smart_toy:", layout="centered")
+PERFIL = perfil_activo()
 
-CATEGORIAS = {
-    "rrhh": "RR. HH.",
-    "financiero": "Financiero",
-    "legal": "Legal",
-    "operacional": "Operaciones",
-    "comercial": "Comercial",
-    "estrategico": "Estratégico",
-    "datos_sistemas": "Datos y sistemas",
-}
+st.set_page_config(page_title=PERFIL.asistente, page_icon=":material/smart_toy:", layout="centered")
+
+
+def marca(perfil: Perfil) -> str:
+    """Nombre del asistente en HTML, con la parte resaltada en el color de acento."""
+    nombre, resaltado = perfil.asistente, perfil.resaltado
+    if resaltado and nombre.endswith(resaltado) and nombre != resaltado:
+        base = nombre[: -len(resaltado)]
+        return f"{html.escape(base)}<span class='ai'>{html.escape(resaltado)}</span>"
+    return html.escape(nombre)
 
 
 def nivel_relevancia(valor: float) -> tuple[str, str]:
@@ -55,14 +58,6 @@ def nivel_relevancia(valor: float) -> tuple[str, str]:
     if valor >= 0.60:
         return "media", "Relevancia media"
     return "baja", "Relevancia baja"
-
-
-EJEMPLOS = [
-    (":material/beach_access:", "¿Cuántos días de vacaciones me corresponden con 6 años de antigüedad?"),
-    (":material/credit_card:", "¿Qué comisión cobra MercadoPago por tarjeta de crédito?"),
-    (":material/sell:", "¿Cuánto cuesta el plan Growth y qué incluye?"),
-    (":material/receipt_long:", "¿Cómo funciona la facturación automática contra ARCA?"),
-]
 
 
 # --------------------------------------------------------------------------
@@ -317,8 +312,8 @@ def modelo_activo() -> str:
 #  Barra lateral: marca + lista de conversaciones + estado
 # --------------------------------------------------------------------------
 with st.sidebar:
-    st.markdown("<div class='marca-lateral'>TechRet<span class='ai'>AI</span></div>", unsafe_allow_html=True)
-    st.caption("Asistente corporativo de TechRetail Solutions")
+    st.markdown(f"<div class='marca-lateral'>{marca(PERFIL)}</div>", unsafe_allow_html=True)
+    st.caption(PERFIL.descripcion_asistente)
 
     if st.button("Nueva conversación", icon=":material/add:", use_container_width=True):
         ir_a_nueva()
@@ -392,8 +387,8 @@ with st.sidebar:
 #  Encabezado + conversación activa
 # --------------------------------------------------------------------------
 st.markdown(
-    "<div class='marca'>TechRet<span class='ai'>AI</span></div>"
-    "<div class='subt'>Preguntá lo que necesites sobre la documentación interna de la empresa.</div>",
+    f"<div class='marca'>{marca(PERFIL)}</div>"
+    f"<div class='subt'>{html.escape(PERFIL.bienvenida)}</div>",
     unsafe_allow_html=True,
 )
 
@@ -410,15 +405,16 @@ if conv["mensajes"]:
     # puede verse recortado) no aparece en el chat: se muestra acá.
     if conv["titulo"] != conv["mensajes"][0]["texto"][:120]:
         st.caption(f":material/forum: {conv['titulo']}")
-else:
+elif PERFIL.sugerencias:
     with inicio.container():
         st.markdown("<div class='seccion'>Probá con una de estas preguntas</div>", unsafe_allow_html=True)
         # Fila por fila, para que las tarjetas de cada fila queden alineadas.
-        for fila in range(0, len(EJEMPLOS), 2):
+        sugerencias = PERFIL.sugerencias
+        for fila in range(0, len(sugerencias), 2):
             cols = st.columns(2)
-            for col, (i, (icono, ejemplo)) in zip(cols, enumerate(EJEMPLOS[fila:fila + 2], start=fila)):
-                if col.button(ejemplo, key=f"ej_{i}", icon=icono, use_container_width=True):
-                    procesar(ejemplo)
+            for col, (i, sug) in zip(cols, enumerate(sugerencias[fila:fila + 2], start=fila)):
+                if col.button(sug.texto, key=f"ej_{i}", icon=sug.icono, use_container_width=True):
+                    procesar(sug.texto)
 
 for i, msg in enumerate(conv["mensajes"]):
     with st.chat_message(msg["rol"], avatar=AVATAR[msg["rol"]]):
@@ -435,7 +431,7 @@ for i, msg in enumerate(conv["mensajes"]):
                 filas = []
                 for f in msg["fuentes"]:
                     clase, etiqueta = nivel_relevancia(f["relevancia"])
-                    categoria = CATEGORIAS.get(f["categoria"], f["categoria"])
+                    categoria = PERFIL.categoria(f["categoria"])
                     filas.append(
                         "<div class='fuente'>"
                         f"<span class='archivo'>{html.escape(f['archivo'])}</span>"

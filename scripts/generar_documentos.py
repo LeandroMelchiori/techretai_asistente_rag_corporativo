@@ -18,9 +18,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from src.config import settings  # noqa: E402
+from src.config import BASE_DIR  # noqa: E402
 
-DOCS = settings.docs_dir
+# Siempre en el perfil de TechRetail, aunque PERFIL apunte a otra empresa.
+DOCS = BASE_DIR / "perfiles" / "techretail" / "documentos"
 
 
 def _dir(categoria: str) -> Path:

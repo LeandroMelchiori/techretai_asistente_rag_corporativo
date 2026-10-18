@@ -1,4 +1,4 @@
-# Imagen del Agente RAG Corporativo de TechRetail.
+# Imagen del agente RAG corporativo (TechRetAI).
 # Pensada para la plataforma Docker + Traefik de OCI: usuario sin privilegios,
 # root filesystem de solo lectura y datos persistentes en el volumen /data.
 FROM python:3.11-slim
@@ -22,7 +22,8 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Código y documentos.
+# Código y perfiles de empresa. Los documentos quedan fuera (.dockerignore):
+# la imagen es pública y no debe llevar información de ninguna empresa.
 COPY . .
 
 # Versión publicada en /app/static/version.txt: el pipeline la consulta para

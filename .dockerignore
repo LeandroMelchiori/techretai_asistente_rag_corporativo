@@ -8,3 +8,6 @@ logs/*.jsonl
 data/chroma
 scratchpad
 *.md.bak
+# Los documentos de cada empresa no van en la imagen: se indexan enviándolos
+# como tar a "scripts.ingest --tar -" (ver docs/deploy_oci.md).
+perfiles/*/documentos

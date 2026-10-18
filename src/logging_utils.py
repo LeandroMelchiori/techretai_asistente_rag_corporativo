@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 
 from .agent import Respuesta
 from .config import settings
+from .perfil import perfil_activo
 
 
 def registrar(respuesta: Respuesta, feedback: str | None = None) -> None:
@@ -19,6 +20,7 @@ def registrar(respuesta: Respuesta, feedback: str | None = None) -> None:
     settings.log_file.parent.mkdir(parents=True, exist_ok=True)
     registro = {
         "timestamp": datetime.now(timezone.utc).isoformat(),
+        "perfil": perfil_activo().id,
         "proveedor": settings.provider,
         "pregunta": respuesta.pregunta,
         "respuesta": respuesta.texto,
