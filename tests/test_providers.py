@@ -30,7 +30,8 @@ class _ClienteFalso:
 
     def generate_content_stream(self, *, model, contents, config):
         self.recibido.append({"contents": list(contents), "config": config})
-        if config.tool_config is not None:  # última ronda: sin herramientas
+        modo = config.tool_config.function_calling_config.mode if config.tool_config else None
+        if modo == types.FunctionCallingConfigMode.NONE:  # última ronda: sin herramientas
             return iter([_respuesta(types.Part.from_text(text="Respuesta forzada."))])
         return iter(self.rondas.pop(0))
 
@@ -72,6 +73,10 @@ def test_ejecuta_lo_que_pide_el_modelo_y_le_devuelve_el_resultado(gemini):
     assert respuesta.name == "ml_pedidos" and respuesta.response == {"total": 1}
     # Las llamadas las ejecuta el agente, no la librería.
     assert cliente.recibido[0]["config"].automatic_function_calling.disable is True
+    # Primera ronda: consultar es obligatorio; después, opcional.
+    modos = [r["config"].tool_config.function_calling_config.mode if r["config"].tool_config else None
+             for r in cliente.recibido]
+    assert modos == [types.FunctionCallingConfigMode.ANY, None]
 
 
 def test_varias_llamadas_en_la_misma_ronda(gemini):
@@ -111,3 +116,37 @@ def test_con_openai_las_herramientas_no_estan_disponibles(monkeypatch):
     monkeypatch.setattr(settings, "provider", "openai")
     with pytest.raises(RuntimeError, match="Gemini"):
         providers.generate_con_herramientas("s", "p", [HERRAMIENTA], lambda n, a: {})
+
+
+class _ClienteEmbeddings:
+    def __init__(self, vectores_por_llamada=None):
+        self.llamadas = []
+        self.vectores_por_llamada = vectores_por_llamada
+        self.models = self
+
+    def embed_content(self, *, model, contents, config):
+        self.llamadas.append(contents)
+        n = self.vectores_por_llamada or len(contents)
+        return types.EmbedContentResponse(
+            embeddings=[types.ContentEmbedding(values=[float(i), 1.0]) for i in range(n)]
+        )
+
+
+def test_embeddings_en_lotes_con_un_contenido_por_texto(gemini, monkeypatch):
+    cliente = _ClienteEmbeddings()
+    monkeypatch.setattr(providers, "_gemini", lambda: cliente)
+    monkeypatch.setattr(providers, "_LOTE_EMBEDDINGS", 2)
+
+    vectores = providers.embed_texts(["a", "b", "c"])
+
+    assert len(vectores) == 3
+    assert [len(c) for c in cliente.llamadas] == [2, 1]
+    # Un Content por texto: con strings sueltos la API devuelve un único vector.
+    assert all(isinstance(c, types.Content) for c in cliente.llamadas[0])
+
+
+def test_embeddings_falla_si_la_api_devuelve_menos_vectores(gemini, monkeypatch):
+    monkeypatch.setattr(providers, "_gemini", lambda: _ClienteEmbeddings(vectores_por_llamada=1))
+
+    with pytest.raises(RuntimeError, match="1 embeddings para 3 textos"):
+        providers.embed_texts(["a", "b", "c"])

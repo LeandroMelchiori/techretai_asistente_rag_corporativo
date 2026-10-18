@@ -47,7 +47,7 @@
       "id": "fuera_de_alcance",
       "pregunta": "¿Cuál es la capital de Australia?",
       "herramientas": [],
-      "debe_mencionar": [["no encontr", "no tengo", "no puedo", "no cuento"]],
+      "debe_mencionar": [["no encontr", "no tengo", "no puedo", "no cuento", "solo puedo"]],
       "no_debe_mencionar": ["canberra"]
     }
   ]

@@ -46,11 +46,18 @@ def _gemini_embed(texts: List[str], is_query: bool) -> List[List[float]]:
     config = types.EmbedContentConfig(task_type="RETRIEVAL_QUERY" if is_query else "RETRIEVAL_DOCUMENT")
     vectors: List[List[float]] = []
     for i in range(0, len(texts), _LOTE_EMBEDDINGS):
+        lote = texts[i : i + _LOTE_EMBEDDINGS]
+        # Cada texto va en su propio Content: una lista de strings sueltos se
+        # interpreta como un único contenido y devuelve un solo vector.
         resp = _gemini().models.embed_content(
             model=settings.gemini_embed_model,
-            contents=texts[i : i + _LOTE_EMBEDDINGS],
+            contents=[types.Content(parts=[types.Part.from_text(text=t)]) for t in lote],
             config=config,
         )
+        if len(resp.embeddings) != len(lote):
+            raise RuntimeError(
+                f"La API devolvió {len(resp.embeddings)} embeddings para {len(lote)} textos."
+            )
         vectors.extend(list(e.values) for e in resp.embeddings)
     return vectors
 
@@ -100,16 +107,26 @@ def _gemini_generate_con_herramientas(
         # Las llamadas las ejecuta el agente, no la librería: así se controlan y registran.
         automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
     )
-    # En la última ronda el modelo ya no puede pedir herramientas: tiene que responder.
-    sin_herramientas = con_herramientas.model_copy(
-        update={"tool_config": types.ToolConfig(
-            function_calling_config=types.FunctionCallingConfig(mode="NONE")
-        )}
-    )
+
+    def con_modo(modo: str):
+        return con_herramientas.model_copy(update={"tool_config": types.ToolConfig(
+            function_calling_config=types.FunctionCallingConfig(mode=modo)
+        )})
+
+    # En la primera ronda el modelo tiene que consultar al menos una herramienta:
+    # así no puede responder con conocimiento general sin mirar los datos.
+    obligado = con_modo("ANY")
+    # En la última ronda ya no puede pedir herramientas: tiene que responder.
+    sin_herramientas = con_modo("NONE")
     historial = [types.Content(role="user", parts=[types.Part.from_text(text=user_prompt)])]
 
     for ronda in range(max_rondas + 1):
-        config = con_herramientas if ronda < max_rondas else sin_herramientas
+        if ronda == max_rondas:
+            config = sin_herramientas
+        elif ronda == 0:
+            config = obligado
+        else:
+            config = con_herramientas
         llamadas = []
         for respuesta in _gemini().models.generate_content_stream(
             model=settings.gemini_chat_model, contents=historial, config=config

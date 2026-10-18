@@ -15,6 +15,7 @@ documentos indexados y la API key configurada.
 Uso:
     PERFIL=perfiles/nogal python -m eval.evaluar_agente
     PERFIL=perfiles/nogal python -m eval.evaluar_agente --pausa 10
+    PERFIL=perfiles/nogal python -m eval.evaluar_agente --solo fuera_de_alcance
 """
 from __future__ import annotations
 
@@ -58,6 +59,7 @@ def verificar(caso: dict, texto: str, usadas: list[str]) -> list[str]:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Evalúa el agente con herramientas.")
     parser.add_argument("--pausa", type=float, default=4, help="Segundos entre casos (cuota de la API).")
+    parser.add_argument("--solo", nargs="+", metavar="ID", help="Evalúa sólo estos casos.")
     parser.add_argument(
         "--casos", type=Path, default=settings.perfil_dir / "casos_agente.json",
         help="Casos a evaluar (por defecto, los del perfil activo).",
@@ -74,6 +76,8 @@ def main() -> int:
         return 1
 
     casos = json.loads(args.casos.read_text(encoding="utf-8"))["casos"]
+    if args.solo:
+        casos = [c for c in casos if c["id"] in args.solo]
     print(f"Evaluando {len(casos)} casos del agente de {perfil.empresa}\n")
 
     herramientas_ok = respuestas_ok = 0
