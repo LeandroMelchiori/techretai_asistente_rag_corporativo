@@ -31,6 +31,11 @@ descripcion = "Asistente de Demo"
 bienvenida = "Preguntá lo que quieras."
 """
 
+CONECTOR = """
+[conectores]
+{nombre} = "{modo}"
+"""
+
 
 def test_hay_al_menos_dos_perfiles():
     assert {p.name for p in PERFILES} >= {"techretail", "nogal"}
@@ -51,6 +56,10 @@ def test_cada_perfil_es_valido_y_coherente_con_sus_documentos(directorio):
     existentes = {p.name for p in (directorio / "documentos").rglob("*") if p.is_file()}
     esperados = {f for c in casos for f in c["fuentes"]}
     assert esperados <= existentes, esperados - existentes
+    # Los conectores en modo demo tienen sus datos de ejemplo.
+    for conector, modo in perfil.conectores.items():
+        if modo == "demo":
+            assert (directorio / "demo" / f"{conector}.json").is_file()
 
 
 @pytest.mark.parametrize("directorio", PERFILES, ids=lambda p: p.name)
@@ -92,3 +101,17 @@ def test_id_con_caracteres_invalidos(tmp_path, id_):
 def test_directorio_sin_perfil(tmp_path):
     with pytest.raises(PerfilInvalido, match="PERFIL"):
         cargar(tmp_path)
+
+
+def test_conector_desconocido(tmp_path):
+    with pytest.raises(PerfilInvalido, match="conector desconocido"):
+        cargar(_escribir(tmp_path, MINIMO + CONECTOR.format(nombre="shopify", modo="demo")))
+
+
+def test_modo_de_conector_no_disponible(tmp_path):
+    with pytest.raises(PerfilInvalido, match="admite los modos: demo"):
+        cargar(_escribir(tmp_path, MINIMO + CONECTOR.format(nombre="mercadolibre", modo="api")))
+
+
+def test_sin_conectores_el_perfil_no_usa_el_agente(tmp_path):
+    assert cargar(_escribir(tmp_path, MINIMO)).conectores == {}

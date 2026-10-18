@@ -10,7 +10,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 
 from dotenv import load_dotenv
 
@@ -68,6 +68,10 @@ class Settings:
     # --- Rutas ---
     # Perfil de la empresa (perfil.toml, documentos/ y set de evaluación).
     perfil_dir: Path = field(default_factory=lambda: BASE_DIR / _get("PERFIL", "perfiles/techretail"))
+    # Perfiles elegibles en la interfaz, separados por coma (opcional, para demos).
+    perfiles_dirs: List[Path] = field(default_factory=lambda: [
+        BASE_DIR / d.strip() for d in _get("PERFILES", "").split(",") if d.strip()
+    ])
     # Sin DOCS_DIR, se usa la carpeta documentos/ del perfil.
     docs_dir: Optional[Path] = field(default_factory=lambda: _ruta_opcional("DOCS_DIR"))
     chroma_dir: Path = field(default_factory=lambda: BASE_DIR / _get("CHROMA_DIR", "data/chroma"))

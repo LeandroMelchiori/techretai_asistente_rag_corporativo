@@ -19,18 +19,23 @@ envios = "Envíos"
 postventa = "Postventa"
 atencion = "Atención al cliente"
 
+# Conectores a las cuentas de la empresa. "demo" usa los datos ficticios de
+# demo/mercadolibre.json. Con conectores, el asistente funciona como agente.
+[conectores]
+mercadolibre = "demo"
+
+[[sugerencias]]
+icono = ":material/forum:"
+texto = "¿Qué preguntas tengo sin responder en Mercado Libre?"
+
+[[sugerencias]]
+icono = ":material/report:"
+texto = "¿Qué hago con el reclamo de las copas rotas?"
+
 [[sugerencias]]
 icono = ":material/local_shipping:"
-texto = "¿Cuánto tarda un envío a Córdoba y cuánto cuesta?"
+texto = "¿Hay pedidos demorados?"
 
 [[sugerencias]]
 icono = ":material/assignment_return:"
 texto = "Un cliente quiere devolver una lámpara a los 20 días de recibirla, ¿se puede?"
-
-[[sugerencias]]
-icono = ":material/credit_card:"
-texto = "¿En cuántas cuotas sin interés se puede pagar?"
-
-[[sugerencias]]
-icono = ":material/forum:"
-texto = "¿Cómo respondo una pregunta de Mercado Libre sobre stock?"

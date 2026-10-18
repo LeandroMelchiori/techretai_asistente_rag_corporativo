@@ -8,12 +8,12 @@ de embedding interna.
 """
 from __future__ import annotations
 
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 import chromadb
 
 from .config import settings
-from .perfil import perfil_activo
+from .perfil import Perfil, perfil_activo
 from .providers import embed_texts
 
 
@@ -22,12 +22,15 @@ def _client() -> "chromadb.ClientAPI":
     return chromadb.PersistentClient(path=str(settings.chroma_dir))
 
 
-def get_collection():
-    """Devuelve (creando si hace falta) la colección de documentos de la empresa."""
+def get_collection(perfil: Optional[Perfil] = None):
+    """Devuelve (creando si hace falta) la colección de documentos de la empresa.
+
+    Sin ``perfil``, la del perfil activo (variable ``PERFIL``).
+    """
     client = _client()
     # Distancia coseno: estándar para similitud semántica de textos.
     return client.get_or_create_collection(
-        name=perfil_activo().coleccion,
+        name=(perfil or perfil_activo()).coleccion,
         metadata={"hnsw:space": "cosine"},
     )
 
@@ -70,14 +73,19 @@ def quitar_documento(ruta: str) -> None:
     get_collection().delete(where={"ruta": ruta})
 
 
-def query(pregunta: str, top_k: int | None = None, categoria: str | None = None) -> List[Dict]:
+def query(
+    pregunta: str,
+    top_k: int | None = None,
+    categoria: str | None = None,
+    perfil: Optional[Perfil] = None,
+) -> List[Dict]:
     """Recupera los fragmentos más similares a la pregunta.
 
     Devuelve una lista de dicts con: texto, metadatos y ``relevancia`` (0-1,
     donde 1 es idéntico). Permite filtrar por categoría vía metadatos.
     """
     top_k = top_k or settings.top_k
-    coleccion = get_collection()
+    coleccion = get_collection(perfil)
     if coleccion.count() == 0:
         return []
 
@@ -104,7 +112,7 @@ def query(pregunta: str, top_k: int | None = None, categoria: str | None = None)
     return fragmentos
 
 
-def stats() -> Dict:
+def stats(perfil: Optional[Perfil] = None) -> Dict:
     """Métricas básicas de la colección (para la interfaz)."""
-    coleccion = get_collection()
+    coleccion = get_collection(perfil)
     return {"fragmentos": coleccion.count()}

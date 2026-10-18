@@ -14,6 +14,7 @@ Ejecutar con:  streamlit run app/streamlit_app.py
 from __future__ import annotations
 
 import html
+import itertools
 import math
 import sys
 import uuid
@@ -28,12 +29,16 @@ from src.agent import responder_en_vivo  # noqa: E402
 from src.config import settings  # noqa: E402
 from src.limites import Decision, LimitadorDeConsultas  # noqa: E402
 from src.logging_utils import registrar  # noqa: E402
-from src.perfil import Perfil, perfil_activo  # noqa: E402
+from src.perfil import Perfil, perfiles_disponibles  # noqa: E402
 
 TITULO_NUEVA = "Nueva conversación"
 AVATAR = {"assistant": ":material/smart_toy:", "user": ":material/person:"}
 
-PERFIL = perfil_activo()
+# Con PERFILES, la interfaz ofrece elegir entre varias empresas (la demo pública).
+PERFILES = {p.id: p for p in perfiles_disponibles()}
+if st.session_state.get("perfil_id") not in PERFILES:
+    st.session_state.perfil_id = next(iter(PERFILES))
+PERFIL = PERFILES[st.session_state.perfil_id]
 
 st.set_page_config(page_title=PERFIL.asistente, page_icon=":material/smart_toy:", layout="centered")
 
@@ -181,7 +186,7 @@ st.markdown(
 def _crear_conversacion() -> int:
     cid = st.session_state.contador
     st.session_state.contador += 1
-    st.session_state.conversaciones[cid] = {"titulo": TITULO_NUEVA, "mensajes": []}
+    st.session_state.conversaciones[cid] = {"titulo": TITULO_NUEVA, "mensajes": [], "perfil": PERFIL.id}
     st.session_state.conv_actual = cid
     return cid
 
@@ -189,7 +194,7 @@ def _crear_conversacion() -> int:
 def ir_a_nueva() -> None:
     """Va a una conversación vacía (reutiliza si ya hay una, para no duplicar)."""
     for cid, c in st.session_state.conversaciones.items():
-        if not c["mensajes"]:
+        if not c["mensajes"] and c["perfil"] == PERFIL.id:
             st.session_state.conv_actual = cid
             return
     _crear_conversacion()
@@ -200,6 +205,11 @@ if "conversaciones" not in st.session_state:
     st.session_state.contador = 0
     st.session_state.renombrando = None
     _crear_conversacion()
+
+# Cada conversación es de una empresa: al cambiar de empresa se pasa a una propia.
+if st.session_state.conversaciones[st.session_state.conv_actual]["perfil"] != PERFIL.id:
+    st.session_state.renombrando = None
+    ir_a_nueva()
 
 
 def conv_actual() -> dict:
@@ -275,15 +285,19 @@ def responder_pendiente(conv: dict) -> None:
     with st.chat_message("assistant", avatar=AVATAR["assistant"]):
         try:
             settings.validate()
-            with st.spinner("Buscando en los documentos…"):
-                resp, partes = responder_en_vivo(conv["mensajes"][-1]["texto"])
-            st.write_stream(partes)
+            aviso = "Consultando…" if PERFIL.conectores else "Buscando en los documentos…"
+            with st.spinner(aviso):
+                resp, partes = responder_en_vivo(conv["mensajes"][-1]["texto"], perfil=PERFIL)
+                # El agente consulta sus herramientas antes del primer texto.
+                primera = next(partes, "")
+            st.write_stream(itertools.chain([primera], partes))
             registrar(resp)
             conv["mensajes"].append(
                 {
                     "rol": "assistant",
                     "texto": resp.texto,
                     "fuentes": resp.fuentes,
+                    "consultas": resp.consultas,
                     "respuesta_obj": resp,
                     "feedback_dado": False,
                 }
@@ -315,6 +329,15 @@ with st.sidebar:
     st.markdown(f"<div class='marca-lateral'>{marca(PERFIL)}</div>", unsafe_allow_html=True)
     st.caption(PERFIL.descripcion_asistente)
 
+    if len(PERFILES) > 1:
+        st.selectbox(
+            "Empresa de ejemplo",
+            options=list(PERFILES),
+            format_func=lambda pid: PERFILES[pid].empresa,
+            key="perfil_id",
+            help="Empresas ficticias: el mismo asistente, configurado para cada una.",
+        )
+
     if st.button("Nueva conversación", icon=":material/add:", use_container_width=True):
         ir_a_nueva()
         st.rerun()
@@ -325,6 +348,7 @@ with st.sidebar:
     listadas = [
         cid for cid in reversed(list(st.session_state.conversaciones.keys()))
         if st.session_state.conversaciones[cid]["mensajes"]
+        and st.session_state.conversaciones[cid]["perfil"] == PERFIL.id
     ]
 
     if not listadas:
@@ -372,14 +396,17 @@ with st.sidebar:
     st.markdown("**Estado**")
     st.caption(f"Modelo: `{modelo_activo()}`")
     try:
-        st.caption(f"Base de conocimiento: **{vectorstore.stats()['fragmentos']}** fragmentos indexados")
+        st.caption(f"Base de conocimiento: **{vectorstore.stats(PERFIL)['fragmentos']}** fragmentos indexados")
     except Exception:
         st.caption("Base de conocimiento: no inicializada")
+    if "mercadolibre" in PERFIL.conectores:
+        st.caption("Conectado a: Mercado Libre (datos de ejemplo, sólo lectura)")
 
     st.divider()
     st.caption(
         ":material/info: Estás conversando con un **agente de IA**. Las respuestas se "
-        "basan en documentos internos y pueden contener errores: verificá en la fuente citada."
+        "basan en los documentos y los datos de la empresa y pueden contener errores: "
+        "verificá en la fuente citada."
     )
 
 
@@ -426,6 +453,16 @@ for i, msg in enumerate(conv["mensajes"]):
             st.info(msg["texto"], icon=":material/hourglass_top:")
         else:
             st.markdown(msg["texto"])
+        consultas = [c for c in msg.get("consultas", []) if c["origen"] != "Documentos"]
+        if consultas:
+            por_origen: dict = {}
+            for c in consultas:
+                resumenes = por_origen.setdefault(c["origen"], [])
+                if c["resumen"] not in resumenes:
+                    resumenes.append(c["resumen"])
+            st.caption(":material/database: Consultó " + " · ".join(
+                f"{origen}: {', '.join(resumenes)}" for origen, resumenes in por_origen.items()
+            ))
         if msg.get("fuentes"):
             with st.expander("Fuentes citadas", icon=":material/description:"):
                 filas = []

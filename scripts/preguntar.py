@@ -23,6 +23,8 @@ def _preguntar(texto: str) -> None:
     resp = responder(texto)
     registrar(resp)
     print("\n" + resp.texto)
+    if resp.consultas:
+        print("\nConsultó: " + ", ".join(f"{c['origen']} ({c['resumen']})" for c in resp.consultas))
     if resp.fuentes:
         print("\nFuentes:")
         for f in resp.fuentes:

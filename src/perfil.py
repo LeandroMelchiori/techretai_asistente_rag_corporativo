@@ -21,6 +21,9 @@ ARCHIVO = "perfil.toml"
 ICONO_POR_DEFECTO = ":material/chat:"
 # Chroma exige nombres de colección ASCII que empiecen con letra o número.
 _ID_VALIDO = re.compile(r"[a-z0-9][a-z0-9_-]{1,40}")
+# Conectores disponibles y sus modos. "demo" usa los datos ficticios de
+# <perfil>/demo/<conector>.json; la conexión a la API real se suma por conector.
+CONECTORES = {"mercadolibre": {"demo"}}
 
 
 @dataclass(frozen=True)
@@ -32,6 +35,7 @@ class Sugerencia:
 @dataclass(frozen=True)
 class Perfil:
     id: str
+    directorio: Path
     empresa: str
     descripcion_empresa: str
     asistente: str
@@ -40,6 +44,9 @@ class Perfil:
     resaltado: str = ""
     categorias: Dict[str, str] = field(default_factory=dict)
     sugerencias: List[Sugerencia] = field(default_factory=list)
+    # Conector -> modo (por ejemplo {"mercadolibre": "demo"}). Sin conectores, el
+    # asistente sólo busca en los documentos.
+    conectores: Dict[str, str] = field(default_factory=dict)
 
     @property
     def coleccion(self) -> str:
@@ -92,8 +99,18 @@ def cargar(directorio: Path) -> Perfil:
             raise PerfilInvalido(f"{origen}: la sugerencia {i} no tiene texto.")
         sugerencias.append(Sugerencia(icono=str(s.get("icono") or ICONO_POR_DEFECTO), texto=texto))
 
+    conectores = {}
+    for nombre, modo in datos.get("conectores", {}).items():
+        if nombre not in CONECTORES:
+            raise PerfilInvalido(f"{origen}: conector desconocido '{nombre}' (disponibles: {', '.join(CONECTORES)}).")
+        if modo not in CONECTORES[nombre]:
+            modos = ", ".join(sorted(CONECTORES[nombre]))
+            raise PerfilInvalido(f"{origen}: el conector '{nombre}' admite los modos: {modos}.")
+        conectores[nombre] = modo
+
     return Perfil(
         id=id_,
+        directorio=directorio,
         empresa=_texto(datos, "empresa", "nombre", origen),
         descripcion_empresa=_texto(datos, "empresa", "descripcion", origen),
         asistente=_texto(datos, "asistente", "nombre", origen),
@@ -102,6 +119,7 @@ def cargar(directorio: Path) -> Perfil:
         resaltado=_texto(datos, "asistente", "resaltado", origen, obligatorio=False),
         categorias={str(k): str(v) for k, v in datos.get("categorias", {}).items()},
         sugerencias=sugerencias,
+        conectores=conectores,
     )
 
 
@@ -109,3 +127,15 @@ def cargar(directorio: Path) -> Perfil:
 def perfil_activo() -> Perfil:
     """El perfil configurado en ``PERFIL`` (se lee una sola vez por proceso)."""
     return cargar(settings.perfil_dir)
+
+
+@lru_cache(maxsize=1)
+def perfiles_disponibles() -> List[Perfil]:
+    """Perfiles entre los que se puede elegir en la interfaz (``PERFILES``).
+
+    Sin ``PERFILES``, sólo el perfil activo. Con varios, la interfaz muestra un
+    selector de empresa: sirve para la demo pública con empresas de ejemplo.
+    """
+    if not settings.perfiles_dirs:
+        return [perfil_activo()]
+    return [cargar(d) for d in settings.perfiles_dirs]
