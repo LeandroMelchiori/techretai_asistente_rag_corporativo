@@ -2,7 +2,7 @@
 Tests del conector de Mercado Libre con la cuenta de demostración de TechRetail
 y de las herramientas que lo exponen al agente.
 """
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import pytest
 
@@ -86,3 +86,15 @@ def test_las_herramientas_son_de_lectura_y_resumen_lo_obtenido(cuenta):
     assert preguntas.resumen == "4 preguntas sin responder"
     assert herramientas["ml_pedidos"].ejecutar(estado="demorado").resumen == "1 pedido (demorado)"
     assert herramientas["ml_publicaciones"].ejecutar(texto="monitor").resumen == "1 publicación"
+
+
+def test_la_antiguedad_no_pierde_una_hora_aunque_el_reloj_avance():
+    # En producción cada lectura del reloj da un instante un poco posterior.
+    lecturas = iter(AHORA + timedelta(milliseconds=i) for i in range(1000))
+    cuenta = MercadoLibreDemo(DEMO, ahora=lambda: next(lecturas))
+
+    antiguedades = {p["id"]: p["antiguedad"] for p in cuenta.preguntas_sin_responder()}
+    assert antiguedades[9200000004] == "hace 26 horas"
+    assert antiguedades[9200000002] == "hace 5 horas"
+    reclamos = {r["id"]: r["antiguedad"] for r in cuenta.reclamos_abiertos()}
+    assert reclamos[5400000001] == "hace 20 horas"

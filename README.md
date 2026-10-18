@@ -41,7 +41,7 @@ Medidos con `gemini-embedding-2` y `gemini-3.5-flash-lite`, con los sets de
 | Preguntas fuera de alcance rechazadas | **3/3** (2 por el umbral, 1 por el modelo) |
 | **Agente** (7 casos con Mercado Libre, incluido un ataque): herramientas y respuesta correctas | **7/7** |
 | Latencia del agente (desde Argentina contra la API) | p50 3,5 s · máx. 5,4 s |
-| Tests automatizados en CI | **91** |
+| Tests automatizados en CI | **92** |
 
 El caso de ataque es una pregunta de comprador que le ordena al asistente
 ocultarla del listado. El agente la lista igual y la marca como sospechosa.

@@ -54,8 +54,11 @@ class MercadoLibreDemo:
         self._ahora = ahora
         self._publicaciones = {p["id"]: p for p in self._datos["publicaciones"]}
 
-    def _hace(self, horas: float) -> datetime:
-        return self._ahora() - timedelta(hours=horas)
+    @staticmethod
+    def _hace(horas: float, ahora: datetime) -> datetime:
+        # Todo se calcula contra una sola lectura del reloj: con dos lecturas, la
+        # antigüedad redondeada hacia abajo perdía una hora ("hace 25 horas" por 26).
+        return ahora - timedelta(hours=horas)
 
     def preguntas_sin_responder(self) -> List[Dict]:
         ahora = self._ahora()
@@ -65,34 +68,34 @@ class MercadoLibreDemo:
                 "id": q["id"],
                 "publicacion": self._publicaciones[q["publicacion"]]["titulo"],
                 "pregunta": q["texto"],
-                "recibida": tiempo.fecha(self._hace(q["hace_horas"])),
-                "antiguedad": tiempo.antiguedad(self._hace(q["hace_horas"]), ahora),
+                "recibida": tiempo.fecha(self._hace(q["hace_horas"], ahora)),
+                "antiguedad": tiempo.antiguedad(self._hace(q["hace_horas"], ahora), ahora),
             }
             for q in preguntas
         ]
 
-    def _pedido(self, p: Dict) -> Dict:
-        ahora = self._ahora()
+    def _pedido(self, p: Dict, ahora: datetime) -> Dict:
         items = [(self._publicaciones[i["publicacion"]], i["cantidad"]) for i in p["items"]]
-        entrega = self._hace(-p["entrega_estimada_en_horas"]) if "entrega_estimada_en_horas" in p else None
+        entrega = self._hace(-p["entrega_estimada_en_horas"], ahora) if "entrega_estimada_en_horas" in p else None
         demorado = p["estado"] in ("pendiente_de_envio", "en_camino") and entrega is not None and entrega < ahora
         pedido = {
             "id": p["id"],
             "comprador": p["comprador"],
             "productos": [f"{pub['titulo']} x{cant}" for pub, cant in items],
             "total": pesos(sum(pub["precio"] * cant for pub, cant in items)),
-            "pagado": tiempo.fecha(self._hace(p["pagado_hace_horas"])),
+            "pagado": tiempo.fecha(self._hace(p["pagado_hace_horas"], ahora)),
             "estado": ESTADOS_PEDIDO[p["estado"]],
             "demorado": demorado,
         }
         if entrega is not None:
             pedido["entrega_estimada"] = tiempo.fecha(entrega)
         if "entregado_hace_horas" in p:
-            pedido["entregado"] = tiempo.fecha(self._hace(p["entregado_hace_horas"]))
+            pedido["entregado"] = tiempo.fecha(self._hace(p["entregado_hace_horas"], ahora))
         return pedido
 
     def pedidos(self, estado: Optional[str] = None) -> List[Dict]:
-        pedidos = [self._pedido(p) for p in self._datos["pedidos"]]
+        ahora = self._ahora()
+        pedidos = [self._pedido(p, ahora) for p in self._datos["pedidos"]]
         if estado == "demorado":
             return [p for p in pedidos if p["demorado"]]
         if estado:
@@ -104,7 +107,7 @@ class MercadoLibreDemo:
         pedidos = {p["id"]: p for p in self._datos["pedidos"]}
         reclamos = []
         for r in self._datos["reclamos"]:
-            pedido = self._pedido(pedidos[r["pedido"]])
+            pedido = self._pedido(pedidos[r["pedido"]], ahora)
             reclamos.append({
                 "id": r["id"],
                 "pedido": r["pedido"],
@@ -112,8 +115,8 @@ class MercadoLibreDemo:
                 "entregado": pedido.get("entregado"),
                 "motivo": r["motivo"],
                 "mensaje_del_comprador": r["texto"],
-                "abierto": tiempo.fecha(self._hace(r["hace_horas"])),
-                "antiguedad": tiempo.antiguedad(self._hace(r["hace_horas"]), ahora),
+                "abierto": tiempo.fecha(self._hace(r["hace_horas"], ahora)),
+                "antiguedad": tiempo.antiguedad(self._hace(r["hace_horas"], ahora), ahora),
             })
         return reclamos
 
