@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import html
 import itertools
+import logging
 import math
 import sys
 import uuid
@@ -38,6 +39,7 @@ from src.perfil import Perfil, perfil_activo  # noqa: E402
 from src.providers import es_cuota_agotada  # noqa: E402
 
 TITULO_NUEVA = "Nueva conversación"
+log = logging.getLogger("techretai")
 AVATAR = {"assistant": ":material/smart_toy:", "user": ":material/person:"}
 
 PERFIL = perfil_activo()
@@ -343,11 +345,13 @@ def responder_pendiente(conv: dict) -> None:
             if es_cuota_agotada(e):
                 conv["mensajes"].append({"rol": "assistant", "texto": aviso_cuota(), "aviso": True})
             else:
+                # El detalle va a los logs del contenedor, no a la pantalla: la demo es
+                # pública y un error técnico no le sirve a quien pregunta.
+                log.exception("No se pudo generar la respuesta")
                 conv["mensajes"].append(
                     {
                         "rol": "assistant",
                         "texto": "No pude generar la respuesta. Probá de nuevo en unos segundos.",
-                        "detalle": str(e)[:300],
                         "error": True,
                         "fuentes": [],
                     }
@@ -494,8 +498,6 @@ for i, msg in enumerate(conv["mensajes"]):
     with st.chat_message(msg["rol"], avatar=AVATAR[msg["rol"]]):
         if msg.get("error"):
             st.error(msg["texto"], icon=":material/error:")
-            if msg.get("detalle"):
-                st.caption(f"Detalle técnico: {msg['detalle']}")
         elif msg.get("aviso"):
             st.info(msg["texto"], icon=":material/hourglass_top:")
         else:
