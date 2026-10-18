@@ -2,6 +2,10 @@
 Interfaz de chat del asistente. Nombre, textos, categorías y preguntas sugeridas
 vienen del perfil de la empresa (src/perfil.py).
 
+Dos públicos: los clientes (sin iniciar sesión) consultan la información pública;
+los empleados, los documentos internos y las cuentas conectadas. En la demo
+pública se entra como empleado con un botón (EMPLEADO_DEMO=1).
+
 Chat web estilo asistente de IA: varias conversaciones con historial en la barra
 lateral (crear, renombrar, eliminar), marca propia, preguntas de ejemplo,
 fuentes citadas y feedback.
@@ -26,21 +30,25 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src import vectorstore  # noqa: E402
 from src.agent import responder_en_vivo  # noqa: E402
+from src.cache import CacheDeRespuestas  # noqa: E402
 from src.config import settings  # noqa: E402
 from src.limites import Decision, LimitadorDeConsultas  # noqa: E402
 from src.logging_utils import registrar  # noqa: E402
-from src.perfil import Perfil, perfiles_disponibles  # noqa: E402
+from src.perfil import Perfil, perfil_activo  # noqa: E402
+from src.providers import es_cuota_agotada  # noqa: E402
 
 TITULO_NUEVA = "Nueva conversación"
 AVATAR = {"assistant": ":material/smart_toy:", "user": ":material/person:"}
 
-# Con PERFILES, la interfaz ofrece elegir entre varias empresas (la demo pública).
-PERFILES = {p.id: p for p in perfiles_disponibles()}
-if st.session_state.get("perfil_id") not in PERFILES:
-    st.session_state.perfil_id = next(iter(PERFILES))
-PERFIL = PERFILES[st.session_state.perfil_id]
+PERFIL = perfil_activo()
 
 st.set_page_config(page_title=PERFIL.asistente, page_icon=":material/smart_toy:", layout="centered")
+
+# Público de la sesión. Sin información para clientes, el asistente es sólo interno.
+if not PERFIL.atiende_clientes:
+    st.session_state.acceso = "empleado"
+st.session_state.setdefault("acceso", "cliente")
+ACCESO = st.session_state.acceso
 
 
 def marca(perfil: Perfil) -> str:
@@ -186,7 +194,7 @@ st.markdown(
 def _crear_conversacion() -> int:
     cid = st.session_state.contador
     st.session_state.contador += 1
-    st.session_state.conversaciones[cid] = {"titulo": TITULO_NUEVA, "mensajes": [], "perfil": PERFIL.id}
+    st.session_state.conversaciones[cid] = {"titulo": TITULO_NUEVA, "mensajes": [], "acceso": ACCESO}
     st.session_state.conv_actual = cid
     return cid
 
@@ -194,7 +202,7 @@ def _crear_conversacion() -> int:
 def ir_a_nueva() -> None:
     """Va a una conversación vacía (reutiliza si ya hay una, para no duplicar)."""
     for cid, c in st.session_state.conversaciones.items():
-        if not c["mensajes"] and c["perfil"] == PERFIL.id:
+        if not c["mensajes"] and c["acceso"] == ACCESO:
             st.session_state.conv_actual = cid
             return
     _crear_conversacion()
@@ -206,8 +214,8 @@ if "conversaciones" not in st.session_state:
     st.session_state.renombrando = None
     _crear_conversacion()
 
-# Cada conversación es de una empresa: al cambiar de empresa se pasa a una propia.
-if st.session_state.conversaciones[st.session_state.conv_actual]["perfil"] != PERFIL.id:
+# Cada conversación es de un público: al cambiar de modo se pasa a una propia.
+if st.session_state.conversaciones[st.session_state.conv_actual]["acceso"] != ACCESO:
     st.session_state.renombrando = None
     ir_a_nueva()
 
@@ -245,9 +253,22 @@ def cliente_id() -> str:
     return st.session_state.setdefault("sesion_id", uuid.uuid4().hex)
 
 
+@st.cache_resource
+def respuestas_guardadas() -> CacheDeRespuestas:
+    """Respuestas a las preguntas sugeridas, compartidas entre sesiones."""
+    return CacheDeRespuestas(duracion_s=settings.cache_sugerencias_min * 60)
+
+
+def aviso_cuota() -> str:
+    texto = "La demo alcanzó su límite de uso por hoy. Volvé a intentarlo más tarde"
+    if settings.video_demo_url:
+        return f"{texto} o mirá el [video de la demo]({settings.video_demo_url})."
+    return f"{texto}."
+
+
 def aviso_limite(decision: Decision) -> str:
     if decision.motivo == "global":
-        return "El asistente alcanzó el límite diario de consultas. Volvé a intentarlo más tarde."
+        return aviso_cuota()
     if decision.espera_s < 60:
         espera = f"{decision.espera_s} segundos"
     else:
@@ -275,8 +296,29 @@ def procesar(pregunta: str) -> None:
     st.rerun()
 
 
+def _mensaje(resp) -> dict:
+    return {
+        "rol": "assistant",
+        "texto": resp.texto,
+        "fuentes": resp.fuentes,
+        "consultas": resp.consultas,
+        "respuesta_obj": resp,
+        "feedback_dado": False,
+    }
+
+
 def responder_pendiente(conv: dict) -> None:
     """Genera la respuesta a la última pregunta y la muestra a medida que se escribe."""
+    pregunta = conv["mensajes"][-1]["texto"]
+    # Las preguntas sugeridas se responden una vez y se reutilizan sin consumir cuota.
+    sugerida = pregunta in {s.texto for s in PERFIL.sugerencias_para(ACCESO)}
+    clave = (PERFIL.id, ACCESO, pregunta)
+    guardada = respuestas_guardadas().obtener(clave) if sugerida else None
+    if guardada:
+        registrar(guardada["resp"], desde_cache=True)
+        conv["mensajes"].append(_mensaje(guardada["resp"]))
+        st.rerun()
+
     decision = limitador().permitir(cliente_id())
     if not decision.permitido:
         conv["mensajes"].append({"rol": "assistant", "texto": aviso_limite(decision), "aviso": True})
@@ -285,33 +327,31 @@ def responder_pendiente(conv: dict) -> None:
     with st.chat_message("assistant", avatar=AVATAR["assistant"]):
         try:
             settings.validate()
-            aviso = "Consultando…" if PERFIL.conectores else "Buscando en los documentos…"
-            with st.spinner(aviso):
-                resp, partes = responder_en_vivo(conv["mensajes"][-1]["texto"], perfil=PERFIL)
+            agente = ACCESO == "empleado" and PERFIL.conectores
+            with st.spinner("Consultando…" if agente else "Buscando en la información…"):
+                resp, partes = responder_en_vivo(pregunta, perfil=PERFIL, acceso=ACCESO)
                 # El agente consulta sus herramientas antes del primer texto.
                 primera = next(partes, "")
             st.write_stream(itertools.chain([primera], partes))
+            # permitir() contó la primera llamada al modelo; el agente puede hacer más.
+            limitador().consumir(resp.llamadas_modelo - 1)
             registrar(resp)
-            conv["mensajes"].append(
-                {
-                    "rol": "assistant",
-                    "texto": resp.texto,
-                    "fuentes": resp.fuentes,
-                    "consultas": resp.consultas,
-                    "respuesta_obj": resp,
-                    "feedback_dado": False,
-                }
-            )
+            if sugerida and resp.contexto_encontrado:
+                respuestas_guardadas().guardar(clave, {"resp": resp})
+            conv["mensajes"].append(_mensaje(resp))
         except Exception as e:  # noqa: BLE001
-            conv["mensajes"].append(
-                {
-                    "rol": "assistant",
-                    "texto": "No pude generar la respuesta. Probá de nuevo en unos segundos.",
-                    "detalle": str(e)[:300],
-                    "error": True,
-                    "fuentes": [],
-                }
-            )
+            if es_cuota_agotada(e):
+                conv["mensajes"].append({"rol": "assistant", "texto": aviso_cuota(), "aviso": True})
+            else:
+                conv["mensajes"].append(
+                    {
+                        "rol": "assistant",
+                        "texto": "No pude generar la respuesta. Probá de nuevo en unos segundos.",
+                        "detalle": str(e)[:300],
+                        "error": True,
+                        "fuentes": [],
+                    }
+                )
     # Re-render para mostrar fuentes y feedback debajo de la respuesta ya escrita.
     st.rerun()
 
@@ -329,15 +369,6 @@ with st.sidebar:
     st.markdown(f"<div class='marca-lateral'>{marca(PERFIL)}</div>", unsafe_allow_html=True)
     st.caption(PERFIL.descripcion_asistente)
 
-    if len(PERFILES) > 1:
-        st.selectbox(
-            "Empresa de ejemplo",
-            options=list(PERFILES),
-            format_func=lambda pid: PERFILES[pid].empresa,
-            key="perfil_id",
-            help="Empresas ficticias: el mismo asistente, configurado para cada una.",
-        )
-
     if st.button("Nueva conversación", icon=":material/add:", use_container_width=True):
         ir_a_nueva()
         st.rerun()
@@ -348,7 +379,7 @@ with st.sidebar:
     listadas = [
         cid for cid in reversed(list(st.session_state.conversaciones.keys()))
         if st.session_state.conversaciones[cid]["mensajes"]
-        and st.session_state.conversaciones[cid]["perfil"] == PERFIL.id
+        and st.session_state.conversaciones[cid]["acceso"] == ACCESO
     ]
 
     if not listadas:
@@ -399,7 +430,7 @@ with st.sidebar:
         st.caption(f"Base de conocimiento: **{vectorstore.stats(PERFIL)['fragmentos']}** fragmentos indexados")
     except Exception:
         st.caption("Base de conocimiento: no inicializada")
-    if "mercadolibre" in PERFIL.conectores:
+    if ACCESO == "empleado" and "mercadolibre" in PERFIL.conectores:
         st.caption("Conectado a: Mercado Libre (datos de ejemplo, sólo lectura)")
 
     st.divider()
@@ -415,9 +446,25 @@ with st.sidebar:
 # --------------------------------------------------------------------------
 st.markdown(
     f"<div class='marca'>{marca(PERFIL)}</div>"
-    f"<div class='subt'>{html.escape(PERFIL.bienvenida)}</div>",
+    f"<div class='subt'>{html.escape(PERFIL.bienvenida(ACCESO))}</div>",
     unsafe_allow_html=True,
 )
+
+if PERFIL.atiende_clientes and ACCESO == "empleado":
+    modo, salir = st.columns([0.62, 0.38], vertical_alignment="center")
+    modo.caption(":material/badge: **Modo empleado (demo):** documentos internos y Mercado Libre.")
+    if salir.button("Volver al modo cliente", key="modo_cliente", icon=":material/logout:",
+                    use_container_width=True):
+        st.session_state.acceso = "cliente"
+        st.rerun()
+elif PERFIL.atiende_clientes and settings.empleado_demo:
+    modo, entrar = st.columns([0.62, 0.38], vertical_alignment="center")
+    modo.caption(":material/storefront: **Modo cliente:** información pública de la tienda.")
+    if entrar.button("Probar como empleado", key="modo_empleado", icon=":material/badge:",
+                     use_container_width=True,
+                     help="En la demo se entra sin contraseña. En una empresa real, con la cuenta de la empresa."):
+        st.session_state.acceso = "empleado"
+        st.rerun()
 
 conv = conv_actual()
 
@@ -432,11 +479,11 @@ if conv["mensajes"]:
     # puede verse recortado) no aparece en el chat: se muestra acá.
     if conv["titulo"] != conv["mensajes"][0]["texto"][:120]:
         st.caption(f":material/forum: {conv['titulo']}")
-elif PERFIL.sugerencias:
+elif PERFIL.sugerencias_para(ACCESO):
     with inicio.container():
         st.markdown("<div class='seccion'>Probá con una de estas preguntas</div>", unsafe_allow_html=True)
         # Fila por fila, para que las tarjetas de cada fila queden alineadas.
-        sugerencias = PERFIL.sugerencias
+        sugerencias = PERFIL.sugerencias_para(ACCESO)
         for fila in range(0, len(sugerencias), 2):
             cols = st.columns(2)
             for col, (i, sug) in zip(cols, enumerate(sugerencias[fila:fila + 2], start=fila)):

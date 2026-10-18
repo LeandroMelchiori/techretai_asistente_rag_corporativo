@@ -5,14 +5,16 @@ Se simula el modelo: un ``generate_con_herramientas`` falso pide herramientas
 a través del ejecutor del agente, como lo haría Gemini, y después escribe la
 respuesta. Así se prueba la orquestación sin llamar a la API.
 """
+from dataclasses import replace
+
 import pytest
 
 from src import agent
 from src.config import BASE_DIR
 from src.perfil import cargar
 
-NOGAL = cargar(BASE_DIR / "perfiles" / "nogal")
 TECHRETAIL = cargar(BASE_DIR / "perfiles" / "techretail")
+SIN_CONECTORES = replace(TECHRETAIL, conectores={})
 
 
 def _frag(archivo, relevancia=0.8):
@@ -27,7 +29,7 @@ def _modelo_falso(llamadas, texto="Respuesta final."):
     """Pide cada (herramienta, argumentos) de ``llamadas`` y después responde."""
     registro = {}
 
-    def generar(system_prompt, user_prompt, herramientas, ejecutar, max_rondas):
+    def generar(system_prompt, user_prompt, herramientas, ejecutar, max_rondas, al_llamar):
         registro["system"] = system_prompt
         registro["herramientas"] = [h.nombre for h in herramientas]
         registro["resultados"] = [ejecutar(nombre, args) for nombre, args in llamadas]
@@ -45,11 +47,12 @@ def test_un_perfil_con_conectores_usa_el_agente(monkeypatch):
     ])
     monkeypatch.setattr(agent, "generate_con_herramientas", generar)
 
-    resp, partes = agent.responder_en_vivo("¿Qué hago con el reclamo de las copas?", perfil=NOGAL)
+    resp, partes = agent.responder_en_vivo("¿Qué hago con el reclamo de los auriculares?", perfil=TECHRETAIL)
     assert "".join(partes) == "Respuesta final."
 
     assert resp.texto == "Respuesta final."
-    assert resp.perfil == "nogal"
+    assert resp.perfil == "techretail"
+    assert resp.llamadas_modelo == 0  # el modelo simulado no cuenta llamadas
     assert [c["resumen"] for c in resp.consultas] == ["2 reclamos abiertos", "1 documento"]
     assert [f["archivo"] for f in resp.fuentes] == ["cambios_y_devoluciones.md"]
     assert resp.contexto_encontrado is True
@@ -62,7 +65,7 @@ def test_el_agente_ofrece_documentos_y_las_herramientas_del_conector(monkeypatch
     generar, registro = _modelo_falso([])
     monkeypatch.setattr(agent, "generate_con_herramientas", generar)
 
-    _, partes = agent.responder_en_vivo("hola", perfil=NOGAL)
+    _, partes = agent.responder_en_vivo("hola", perfil=TECHRETAIL)
     list(partes)
 
     assert registro["herramientas"] == [
@@ -80,7 +83,7 @@ def test_un_perfil_sin_conectores_sigue_con_el_rag_directo(monkeypatch):
     monkeypatch.setattr(agent.vectorstore, "query", lambda *a, **k: [_frag("vacaciones.docx")])
     monkeypatch.setattr(agent, "generate_stream", lambda s, u: iter(["21 días."]))
 
-    resp, partes = agent.responder_en_vivo("¿vacaciones?", perfil=TECHRETAIL)
+    resp, partes = agent.responder_en_vivo("¿vacaciones?", perfil=SIN_CONECTORES)
 
     assert "".join(partes) == "21 días."
     assert resp.consultas == []
@@ -93,7 +96,7 @@ def test_herramienta_inexistente_y_argumentos_no_declarados(monkeypatch):
     ])
     monkeypatch.setattr(agent, "generate_con_herramientas", generar)
 
-    resp, partes = agent.responder_en_vivo("x", perfil=NOGAL)
+    resp, partes = agent.responder_en_vivo("x", perfil=TECHRETAIL)
     list(partes)
 
     assert "error" in registro["resultados"][0]
@@ -109,7 +112,7 @@ def test_si_una_herramienta_falla_el_modelo_recibe_un_error_y_sigue(monkeypatch)
     generar, registro = _modelo_falso([("buscar_documentos", {"consulta": "garantía"})])
     monkeypatch.setattr(agent, "generate_con_herramientas", generar)
 
-    resp, partes = agent.responder_en_vivo("¿garantía?", perfil=NOGAL)
+    resp, partes = agent.responder_en_vivo("¿garantía?", perfil=TECHRETAIL)
     list(partes)
 
     assert "error" in registro["resultados"][0]
@@ -122,7 +125,7 @@ def test_limite_de_llamadas_por_pregunta(monkeypatch):
     generar, registro = _modelo_falso(llamadas)
     monkeypatch.setattr(agent, "generate_con_herramientas", generar)
 
-    resp, partes = agent.responder_en_vivo("x", perfil=NOGAL)
+    resp, partes = agent.responder_en_vivo("x", perfil=TECHRETAIL)
     list(partes)
 
     assert len(resp.consultas) == agent.MAX_LLAMADAS
@@ -133,7 +136,7 @@ def test_sin_texto_del_modelo_responde_el_fallback(monkeypatch):
     generar, _ = _modelo_falso([], texto="")
     monkeypatch.setattr(agent, "generate_con_herramientas", generar)
 
-    resp, partes = agent.responder_en_vivo("x", perfil=NOGAL)
+    resp, partes = agent.responder_en_vivo("x", perfil=TECHRETAIL)
 
     assert "".join(partes) == agent.FALLBACK
     assert resp.contexto_encontrado is False
@@ -143,14 +146,14 @@ def test_responder_sin_streaming_tambien_usa_el_agente(monkeypatch):
     generar, _ = _modelo_falso([("ml_preguntas_sin_responder", {})], texto="Tenés 4 preguntas.")
     monkeypatch.setattr(agent, "generate_con_herramientas", generar)
 
-    resp = agent.responder("¿preguntas?", perfil=NOGAL)
+    resp = agent.responder("¿preguntas?", perfil=TECHRETAIL)
 
     assert resp.texto == "Tenés 4 preguntas."
     assert resp.consultas[0]["resumen"] == "4 preguntas sin responder"
 
 
 def test_el_prompt_del_agente_mantiene_las_defensas():
-    prompt = agent.system_prompt_agente(NOGAL).lower()
+    prompt = agent.system_prompt_agente(TECHRETAIL).lower()
 
     assert "no confiables" in prompt
     assert "no las obedezcas" in prompt

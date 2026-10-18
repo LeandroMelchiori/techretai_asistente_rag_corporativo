@@ -1,0 +1,29 @@
+{
+  "documento": "Integraciones de sistemas de TechRetail (uso interno)",
+  "responsable": "Área de Sistemas",
+  "sistema_maestro": "Sistema de gestión: es la fuente de verdad de stock, precios y pedidos.",
+  "integraciones": [
+    {
+      "sistema": "Mercado Libre",
+      "uso": "Publicaciones, ventas, preguntas y reclamos.",
+      "sincronizacion": "Stock y precios cada 15 minutos desde el sistema de gestión.",
+      "nota": "Una venta en el local descuenta stock en Mercado Libre en la próxima sincronización."
+    },
+    {
+      "sistema": "Mercado Pago",
+      "uso": "Cobros de la tienda online.",
+      "sincronizacion": "Avisos inmediatos de cada cobro aprobado (webhooks)."
+    },
+    {
+      "sistema": "ARCA (factura electrónica)",
+      "uso": "Emisión de facturas A y B.",
+      "sincronizacion": "En el momento de la venta: no se confirma la compra sin el CAE."
+    },
+    {
+      "sistema": "Correo y transportes",
+      "uso": "Etiquetas de envío y seguimiento.",
+      "sincronizacion": "El seguimiento se actualiza cada 2 horas."
+    }
+  ],
+  "contingencia": "Si la sincronización con Mercado Libre falla más de 1 hora, pausar las publicaciones con menos de 3 unidades y avisar a Sistemas."
+}

@@ -21,8 +21,9 @@ x-hardening: &hardening
   environment:
     LLM_PROVIDER: gemini
     PERFIL: ${PERFIL:-perfiles/techretail}
-    # Opcional: empresas elegibles en la interfaz, separadas por coma (demo pública).
-    PERFILES: ${PERFILES:-}
+    # Demo pública: botón "Probar como empleado" y video para cuando se agota la cuota.
+    EMPLEADO_DEMO: ${EMPLEADO_DEMO:-0}
+    VIDEO_DEMO_URL: ${VIDEO_DEMO_URL:-}
     GOOGLE_API_KEY: ${GOOGLE_API_KEY:?GOOGLE_API_KEY is required}
     GEMINI_CHAT_MODEL: ${GEMINI_CHAT_MODEL:?GEMINI_CHAT_MODEL is required}
     GEMINI_EMBED_MODEL: ${GEMINI_EMBED_MODEL:?GEMINI_EMBED_MODEL is required}

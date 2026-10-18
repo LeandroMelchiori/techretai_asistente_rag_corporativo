@@ -10,7 +10,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Optional
+from typing import Optional
 
 from dotenv import load_dotenv
 
@@ -65,13 +65,18 @@ class Settings:
     rate_limit_daily: int = field(default_factory=lambda: int(_get("RATE_LIMIT_DAILY", "300")))
     max_question_chars: int = field(default_factory=lambda: int(_get("MAX_QUESTION_CHARS", "500")))
 
+    # --- Demo pública ---
+    # Muestra el botón "Probar como empleado" sin iniciar sesión. Sólo para demos
+    # con datos ficticios: en una empresa real, el modo empleado requiere login.
+    empleado_demo: bool = field(default_factory=lambda: _get("EMPLEADO_DEMO", "0") == "1")
+    # Video de la demo, para mostrar cuando se agota la cuota de la API.
+    video_demo_url: str = field(default_factory=lambda: _get("VIDEO_DEMO_URL", ""))
+    # Minutos que se guarda la respuesta a una pregunta sugerida (0 = no se guarda).
+    cache_sugerencias_min: int = field(default_factory=lambda: int(_get("CACHE_SUGERENCIAS_MIN", "360")))
+
     # --- Rutas ---
     # Perfil de la empresa (perfil.toml, documentos/ y set de evaluación).
     perfil_dir: Path = field(default_factory=lambda: BASE_DIR / _get("PERFIL", "perfiles/techretail"))
-    # Perfiles elegibles en la interfaz, separados por coma (opcional, para demos).
-    perfiles_dirs: List[Path] = field(default_factory=lambda: [
-        BASE_DIR / d.strip() for d in _get("PERFILES", "").split(",") if d.strip()
-    ])
     # Sin DOCS_DIR, se usa la carpeta documentos/ del perfil.
     docs_dir: Optional[Path] = field(default_factory=lambda: _ruta_opcional("DOCS_DIR"))
     chroma_dir: Path = field(default_factory=lambda: BASE_DIR / _get("CHROMA_DIR", "data/chroma"))

@@ -63,3 +63,17 @@ def test_consulta_rechazada_no_consume_cupo():
 def test_cero_desactiva_los_topes():
     lim = LimitadorDeConsultas(por_cliente=0, ventana_s=60, por_dia=0)
     assert all(lim.permitir("a").permitido for _ in range(100))
+
+
+def test_las_llamadas_extra_del_agente_cuentan_para_el_tope_global():
+    reloj = Reloj()
+    lim = LimitadorDeConsultas(por_cliente=0, ventana_s=60, por_dia=5, reloj=reloj)
+
+    assert lim.permitir("a").permitido  # 1 llamada
+    lim.consumir(3)  # el agente hizo 4 en total
+    assert lim.permitir("b").permitido  # 5
+    decision = lim.permitir("c")
+
+    assert not decision.permitido and decision.motivo == "global"
+    reloj.t += 24 * 60 * 60
+    assert lim.permitir("c").permitido

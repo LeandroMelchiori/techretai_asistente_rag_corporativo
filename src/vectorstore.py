@@ -78,19 +78,31 @@ def query(
     top_k: int | None = None,
     categoria: str | None = None,
     perfil: Optional[Perfil] = None,
+    categorias: Optional[List[str]] = None,
 ) -> List[Dict]:
     """Recupera los fragmentos más similares a la pregunta.
 
     Devuelve una lista de dicts con: texto, metadatos y ``relevancia`` (0-1,
     donde 1 es idéntico). Permite filtrar por categoría vía metadatos.
+
+    ``categorias`` restringe la búsqueda a esas categorías (el acceso de un
+    cliente): el filtro lo aplica la base, así que los fragmentos de otras
+    categorías nunca se recuperan.
     """
     top_k = top_k or settings.top_k
     coleccion = get_collection(perfil)
     if coleccion.count() == 0:
         return []
 
+    if categorias is not None and categoria and categoria not in categorias:
+        return []
+    if categoria:
+        filtro = {"categoria": categoria}
+    elif categorias is not None:
+        filtro = {"categoria": {"$in": list(categorias)}}
+    else:
+        filtro = None
     vector = embed_texts([pregunta], is_query=True)[0]
-    filtro = {"categoria": categoria} if categoria else None
 
     resultado = coleccion.query(
         query_embeddings=[vector],

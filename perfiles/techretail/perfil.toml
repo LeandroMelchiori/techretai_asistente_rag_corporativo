@@ -2,7 +2,9 @@
 #
 # Junto a este archivo van:
 #   documentos/<categoría>/...   los documentos a indexar (no se incluyen en la imagen)
-#   preguntas_eval.json          el set de evaluación de esta empresa
+#   preguntas_eval.json          el set de evaluación de la recuperación
+#   casos_agente.json            el set de evaluación del agente (si hay conectores)
+#   demo/<conector>.json         datos de ejemplo de los conectores en modo "demo"
 #
 # Se elige con la variable de entorno PERFIL (por defecto, perfiles/techretail).
 
@@ -10,40 +12,80 @@
 id = "techretail"
 
 [empresa]
-nombre = "TechRetail Solutions S.R.L."
-# Completa la frase "el asistente interno de <nombre>, <descripción>".
-descripcion = "una plataforma SaaS de e-commerce para PyMEs y emprendedores en Argentina"
+nombre = "TechRetail S.R.L."
+# Completa la frase "el asistente de <nombre>, <descripción>".
+descripcion = "una tienda de tecnología de Rosario que vende notebooks, celulares, accesorios y productos gamer en su tienda online, en Mercado Libre y en su local"
 
 [asistente]
 nombre = "TechRetAI"
 # Parte final del nombre que se muestra con el color de acento (opcional).
 resaltado = "AI"
-descripcion = "Asistente corporativo de TechRetail Solutions"
-bienvenida = "Preguntá lo que necesites sobre la documentación interna de la empresa."
+descripcion = "Asistente de TechRetail, tienda de tecnología"
+
+# Público de clientes (opcional). Sin iniciar sesión, sólo se consulta lo que está
+# en estas categorías; el filtro lo aplica la base vectorial, no el prompt.
+[clientes]
+bienvenida = "Consultá envíos, medios de pago, garantías y cambios."
+categorias = ["clientes"]
+
+# Empleados: todos los documentos y los conectores.
+[empleados]
+bienvenida = "Documentación interna de TechRetail y su cuenta de Mercado Libre."
 
 # Nombre visible de cada subcarpeta de documentos/.
 [categorias]
+clientes = "Clientes"
+atencion = "Atención"
 rrhh = "RR. HH."
-financiero = "Financiero"
-legal = "Legal"
+financiero = "Finanzas"
 operacional = "Operaciones"
 comercial = "Comercial"
-estrategico = "Estratégico"
-datos_sistemas = "Datos y sistemas"
+datos_sistemas = "Sistemas"
+estrategico = "Estrategia"
 
-# Preguntas sugeridas en la pantalla de inicio (íconos de Material Symbols).
+# Conectores a las cuentas de la empresa. "demo" usa los datos ficticios de
+# demo/mercadolibre.json. Con conectores, el modo empleado funciona como agente.
+[conectores]
+mercadolibre = "demo"
+
+# Preguntas sugeridas en la pantalla de inicio de cada público
+# (íconos de Material Symbols).
 [[sugerencias]]
+para = "clientes"
+icono = ":material/local_shipping:"
+texto = "¿Cuánto cuesta el envío a Córdoba y cuánto tarda?"
+
+[[sugerencias]]
+para = "clientes"
+icono = ":material/credit_card:"
+texto = "¿En cuántas cuotas sin interés puedo pagar?"
+
+[[sugerencias]]
+para = "clientes"
+icono = ":material/build:"
+texto = "Mi notebook dejó de funcionar a los dos meses, ¿qué hago?"
+
+[[sugerencias]]
+para = "clientes"
+icono = ":material/assignment_return:"
+texto = "¿Puedo cambiar un producto si ya lo abrí?"
+
+[[sugerencias]]
+para = "empleados"
+icono = ":material/forum:"
+texto = "¿Qué preguntas tengo sin responder en Mercado Libre?"
+
+[[sugerencias]]
+para = "empleados"
+icono = ":material/report:"
+texto = "¿Qué hago con el reclamo de los auriculares?"
+
+[[sugerencias]]
+para = "empleados"
+icono = ":material/schedule:"
+texto = "¿Hay pedidos demorados?"
+
+[[sugerencias]]
+para = "empleados"
 icono = ":material/beach_access:"
 texto = "¿Cuántos días de vacaciones me corresponden con 6 años de antigüedad?"
-
-[[sugerencias]]
-icono = ":material/credit_card:"
-texto = "¿Qué comisión cobra MercadoPago por tarjeta de crédito?"
-
-[[sugerencias]]
-icono = ":material/sell:"
-texto = "¿Cuánto cuesta el plan Growth y qué incluye?"
-
-[[sugerencias]]
-icono = ":material/receipt_long:"
-texto = "¿Cómo funciona la facturación automática contra ARCA?"

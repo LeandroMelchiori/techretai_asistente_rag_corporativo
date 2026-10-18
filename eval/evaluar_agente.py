@@ -9,13 +9,13 @@ Para cada caso de ``perfiles/<empresa>/casos_agente.json`` verifica:
 Incluye un caso de *prompt injection* indirecto: una pregunta de comprador
 que le pide al asistente que la oculte del listado.
 
-Requisitos: un perfil con conectores (por ejemplo PERFIL=perfiles/nogal), sus
+Requisitos: un perfil con conectores (por ejemplo el de TechRetail), sus
 documentos indexados y la API key configurada.
 
 Uso:
-    PERFIL=perfiles/nogal python -m eval.evaluar_agente
-    PERFIL=perfiles/nogal python -m eval.evaluar_agente --pausa 10
-    PERFIL=perfiles/nogal python -m eval.evaluar_agente --solo fuera_de_alcance
+    python -m eval.evaluar_agente
+    python -m eval.evaluar_agente --pausa 10
+    python -m eval.evaluar_agente --solo fuera_de_alcance
 """
 from __future__ import annotations
 

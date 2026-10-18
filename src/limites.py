@@ -6,7 +6,8 @@ con preguntas automatizadas. Se aplican dos topes en memoria, que se reinician
 con el proceso (suficiente para este volumen):
 
     - por cliente: N preguntas en una ventana deslizante de M minutos;
-    - global: N preguntas por día entre todos los clientes.
+    - global: N llamadas al modelo por día entre todos los clientes. Se cuentan
+      llamadas y no preguntas porque el agente puede hacer varias por pregunta.
 
 Un valor 0 desactiva el tope correspondiente.
 """
@@ -63,6 +64,17 @@ class LimitadorDeConsultas:
             marcas.append(ahora)
             self._global.append(ahora)
             return Decision(True)
+
+    def consumir(self, llamadas: int) -> None:
+        """Suma al tope global las llamadas al modelo extra de una respuesta.
+
+        ``permitir`` ya cuenta la primera; el agente informa las demás al terminar.
+        """
+        if llamadas <= 0:
+            return
+        ahora = self._reloj()
+        with self._lock:
+            self._global.extend([ahora] * llamadas)
 
     def _purgar_clientes(self, ahora: float) -> None:
         for cliente in list(self._clientes):

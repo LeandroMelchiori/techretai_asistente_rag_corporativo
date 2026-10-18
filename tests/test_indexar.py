@@ -166,3 +166,18 @@ def test_el_tar_no_puede_escribir_fuera_del_directorio_temporal(tmp_path):
     with pytest.raises(tarfile.TarError):
         ingest._extraer_tar(flujo, tmp_path / "destino")
     assert not (tmp_path / "fuera.md").exists()
+
+
+# --- Filtro por categorías (acceso de clientes) ---------------------------------
+
+def test_la_busqueda_por_categorias_nunca_devuelve_otras(docs, embebidos):
+    (docs / "clientes").mkdir()
+    (docs / "clientes" / "envios.md").write_text("Envíos a todo el país.", encoding="utf-8")
+    _sincronizar(docs)
+
+    publicos = vectorstore.query("vacaciones", top_k=10, categorias=["clientes"])
+    assert {f["meta"]["categoria"] for f in publicos} == {"clientes"}
+    # Sin filtro se recupera todo.
+    assert {f["meta"]["categoria"] for f in vectorstore.query("x", top_k=10)} == {"clientes", "rrhh", "legal"}
+    # Pedir una categoría fuera de las permitidas no devuelve nada.
+    assert vectorstore.query("x", categoria="rrhh", categorias=["clientes"]) == []

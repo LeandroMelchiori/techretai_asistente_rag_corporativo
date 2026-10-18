@@ -35,7 +35,7 @@ el host. La única excepción es el volumen `/data` con escritura, porque Chroma
 | Ruta | Contenido |
 |---|---|
 | `/opt/apps/apps/techretai/compose.yaml` | Copia de `deploy/oci/compose.yaml` |
-| `/opt/apps/apps/techretai/.env` | `TECHRETAI_IMAGE`, `GEMINI_CHAT_MODEL`, `GEMINI_EMBED_MODEL` (no son secretos) |
+| `/opt/apps/apps/techretai/.env` | `TECHRETAI_IMAGE`, `GEMINI_CHAT_MODEL`, `GEMINI_EMBED_MODEL` y, en la demo pública, `EMPLEADO_DEMO=1` y `VIDEO_DEMO_URL` (no son secretos) |
 | `/etc/docker-platform/apps/techretai/runtime.env` | `GOOGLE_API_KEY` (root, `0600`) |
 
 Los comandos siguientes se ejecutan desde el equipo del operador, que es la única

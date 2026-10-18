@@ -1,22 +1,32 @@
-# Manual de Onboarding de Colaboradores — TechRetail
+# Manual de onboarding de colaboradores
 
 ¡Bienvenido/a a TechRetail! Este manual resume tus primeros pasos.
 
 ## Primer día
-1. Retirá tu notebook y credenciales de acceso con el equipo de IT.
-2. Configurá el doble factor de autenticación (2FA) en todas las cuentas.
-3. Sumate a los canales de Slack de tu squad.
 
-## Estructura de squads
-Trabajamos en squads multidisciplinarios (Producto, Pagos, Logística y
-Plataforma). Cada squad tiene un Product Owner, un Tech Lead y desarrolladores.
+1. Retirá tus credenciales del sistema de gestión con el equipo de Sistemas.
+2. Activá el doble factor de autenticación (2FA) en todas tus cuentas.
+3. Si vas a atender Mercado Libre, pedí tu usuario de colaborador: tiene permisos
+   limitados y no puede cambiar precios ni datos de la cuenta.
+4. Leé la guía para responder preguntas en Mercado Libre y las políticas de
+   cambios y de garantía.
 
-## Modalidad de trabajo
-- Esquema híbrido: 3 días remotos y 2 presenciales por semana.
-- Horario flexible con núcleo obligatorio de 10 a 16 h.
+## Áreas
+
+- **Ventas y atención:** local, tienda online y Mercado Libre.
+- **Depósito y logística:** recepción, preparación y despacho de pedidos.
+- **Marketing digital:** publicaciones, campañas y redes.
+- **Administración:** facturación, cobros y proveedores.
+
+Cada área tiene un encargado, que aprueba vacaciones, gastos y horarios.
+
+## Horarios
+
+- Local y depósito: turnos rotativos de lunes a sábado.
+- Administración y marketing: esquema híbrido, 2 días remotos por semana.
 
 ## Herramientas
-- Gestión de tareas: Jira.
-- Documentación: Confluence.
-- Comunicación: Slack.
-- Repositorios: GitHub.
+
+- Sistema de gestión: stock, precios y pedidos.
+- Comunicación interna: Slack.
+- Correo y documentos: Google Workspace.

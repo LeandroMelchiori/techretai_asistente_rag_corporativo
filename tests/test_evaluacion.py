@@ -32,10 +32,10 @@ def test_ignora_tildes_y_mayusculas():
     assert verificar(caso, "Queda la Última unidad.", []) == []
 
 
-def test_los_casos_de_nogal_usan_herramientas_que_existen():
-    nogal = cargar(BASE_DIR / "perfiles" / "nogal")
-    disponibles = {h.nombre for h in agent.herramientas_de(nogal)}
-    casos = json.loads((nogal.directorio / "casos_agente.json").read_text(encoding="utf-8"))["casos"]
+def test_los_casos_del_agente_usan_herramientas_que_existen():
+    perfil = cargar(BASE_DIR / "perfiles" / "techretail")
+    disponibles = {h.nombre for h in agent.herramientas_de(perfil)}
+    casos = json.loads((perfil.directorio / "casos_agente.json").read_text(encoding="utf-8"))["casos"]
 
     for caso in casos:
         assert set(caso["herramientas"]) <= disponibles, caso["id"]

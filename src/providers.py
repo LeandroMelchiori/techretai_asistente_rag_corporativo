@@ -14,7 +14,7 @@ Expone cuatro funciones de alto nivel:
 from __future__ import annotations
 
 from functools import lru_cache
-from typing import Any, Callable, Dict, Iterator, List
+from typing import Any, Callable, Dict, Iterator, List, Optional
 
 from .config import settings
 from .herramientas.base import Herramienta
@@ -94,6 +94,7 @@ def _gemini_generate_con_herramientas(
     herramientas: List[Herramienta],
     ejecutar: Callable[[str, Dict[str, Any]], Dict[str, Any]],
     max_rondas: int,
+    al_llamar: Callable[[], None],
 ) -> Iterator[str]:
     from google.genai import types
 
@@ -128,6 +129,7 @@ def _gemini_generate_con_herramientas(
         else:
             config = con_herramientas
         llamadas = []
+        al_llamar()
         for respuesta in _gemini().models.generate_content_stream(
             model=settings.gemini_chat_model, contents=historial, config=config
         ):
@@ -231,13 +233,23 @@ def generate_con_herramientas(
     herramientas: List[Herramienta],
     ejecutar: Callable[[str, Dict[str, Any]], Dict[str, Any]],
     max_rondas: int = 3,
+    al_llamar: Optional[Callable[[], None]] = None,
 ) -> Iterator[str]:
     """Entrega la respuesta en partes; antes, el modelo puede pedir herramientas.
 
     ``ejecutar(nombre, argumentos)`` corre la herramienta y devuelve el resultado
     que recibe el modelo. Hay como máximo ``max_rondas`` rondas de llamadas;
-    después el modelo tiene que responder con lo que obtuvo.
+    después el modelo tiene que responder con lo que obtuvo. ``al_llamar`` se
+    invoca antes de cada llamada al modelo (para contarlas).
     """
     if settings.provider != "gemini":
         raise RuntimeError("Las herramientas por ahora sólo están disponibles con Gemini.")
-    return _gemini_generate_con_herramientas(system_prompt, user_prompt, herramientas, ejecutar, max_rondas)
+    return _gemini_generate_con_herramientas(
+        system_prompt, user_prompt, herramientas, ejecutar, max_rondas, al_llamar or (lambda: None)
+    )
+
+
+def es_cuota_agotada(error: Exception) -> bool:
+    """True si la API rechazó la llamada por cuota o límite de uso (HTTP 429)."""
+    codigo = getattr(error, "code", None) or getattr(error, "status_code", None)
+    return codigo == 429 or "RESOURCE_EXHAUSTED" in str(error)
